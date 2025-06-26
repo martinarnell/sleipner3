@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://sleipner.ai/sitemap.xml
+
+# Block admin areas
+Disallow: /api/
+Disallow: /dashboard/
+
+# Allow important pages
+Allow: /auth/signup
+Allow: /auth/signin 
