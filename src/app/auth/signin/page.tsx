@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

@@ -226,6 +226,7 @@ function buildMessagesForAPI(systemPrompts: Message[], conversationMessages: Mes
 }
 
 // Step 1: Cache check
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function checkCache(queryHash: string) {
   const startTime = Date.now()
   // Cache infrastructure in place but always returns no hit for now
