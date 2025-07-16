@@ -29,7 +29,7 @@ export default async function Dashboard() {
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">{user.email}</span>
               <form action="/auth/signout" method="post">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" type="submit">
                   Sign Out
                 </Button>
               </form>

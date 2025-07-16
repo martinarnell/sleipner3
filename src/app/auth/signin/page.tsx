@@ -12,12 +12,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 
 function SignInForm() {
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [magicLinkLoading, setMagicLinkLoading] = useState(false)
   const [error, setError] = useState('')
   const [magicLinkSent, setMagicLinkSent] = useState(false)
-  const [authMode, setAuthMode] = useState<'password' | 'magic-link'>('password')
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -43,32 +40,9 @@ function SignInForm() {
     }
   }, [searchParams, router])
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        setError(error.message)
-      } else {
-        router.push('/dashboard')
-      }
-    } catch {
-      setError('An unexpected error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleMagicLinkSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
-    setMagicLinkLoading(true)
+    setLoading(true)
     setError('')
     setMagicLinkSent(false)
 
@@ -77,18 +51,23 @@ function SignInForm() {
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/dashboard`,
+          shouldCreateUser: false, // Don't create new users, only allow existing/invited users
         },
       })
 
       if (error) {
-        setError(error.message)
+        if (error.message.includes('Signup') || error.message.includes('not authorized')) {
+          setError('This email is not authorized to access this application. Please contact an administrator for an invitation.')
+        } else {
+          setError(error.message)
+        }
       } else {
         setMagicLinkSent(true)
       }
     } catch {
       setError('An unexpected error occurred')
     } finally {
-      setMagicLinkLoading(false)
+      setLoading(false)
     }
   }
 
@@ -131,7 +110,7 @@ function SignInForm() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Sign In</CardTitle>
           <CardDescription>
-            Welcome back to Sleipner
+            Welcome back to Sleipner. Enter your email to receive a magic link.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -141,94 +120,38 @@ function SignInForm() {
             </Alert>
           )}
 
-          {/* Auth Mode Toggle */}
-          <div className="flex gap-2 mb-6">
+          <form onSubmit={handleMagicLinkSignIn} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="Enter your email"
+              />
+            </div>
+
             <Button
-              type="button"
-              variant={authMode === 'password' ? 'default' : 'outline'}
-              onClick={() => setAuthMode('password')}
-              className="flex-1"
+              type="submit"
+              disabled={loading}
+              className="w-full"
             >
-              Password
+              {loading ? 'Sending magic link...' : 'Send Magic Link'}
             </Button>
-            <Button
-              type="button"
-              variant={authMode === 'magic-link' ? 'default' : 'outline'}
-              onClick={() => setAuthMode('magic-link')}
-              className="flex-1"
-            >
-              Magic Link
-            </Button>
-          </div>
-
-          {authMode === 'password' ? (
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="Enter your email"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="Enter your password"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={loading}
-                className="w-full"
-              >
-                {loading ? 'Signing in...' : 'Sign In'}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleMagicLinkSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="magic-email">Email</Label>
-                <Input
-                  id="magic-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="Enter your email"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={magicLinkLoading}
-                className="w-full"
-              >
-                {magicLinkLoading ? 'Sending link...' : 'Send Magic Link'}
-              </Button>
-
-              <div className="text-sm text-muted-foreground text-center">
-                We&apos;ll send you a secure link to sign in instantly
-              </div>
-            </form>
-          )}
+          </form>
 
           <div className="mt-6 text-center">
             <p className="text-sm text-muted-foreground">
-              Don&apos;t have an account?{' '}
-              <Link href="/auth/signup" className="text-primary hover:underline font-medium">
-                Sign up
-              </Link>
+              Don&apos;t have access?{' '}
+              <span className="text-primary">Contact an administrator for an invitation.</span>
+            </p>
+          </div>
+
+          <div className="mt-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              By signing in, you agree to our Terms of Service and Privacy Policy.
             </p>
           </div>
         </CardContent>

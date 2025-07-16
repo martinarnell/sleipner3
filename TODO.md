@@ -1,7 +1,11 @@
-- [x] font
-- [] limit users to only by invite
-- [] hide billing for now
-- [] user based demo page
+- [] Invite only users
+- [] Give users credits
+- [] Basic chat completions endpoint
+    - [] Bring your own key
+    - [] demo page
+- [] improve design of magic link email
+
+- [] limit users with credits (ignore billing for now)
 - [] basic routing framework testable from demo page
 - [] figure out byob or replace url or what
 - [] save all prompts and responses and so on
@@ -9,7 +13,6 @@
 - [] improve routing and so on
     - [] run tests and finetune
 - [] in transit basic prompt compression
-- [] limit users with credits (ignore billing for now)
 - [] improve user page 
 - [] improve dashboard
 - [] improve landing page with animated demo
