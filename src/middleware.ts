@@ -44,9 +44,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redirect to dashboard if already authenticated and trying to access auth pages
+  // Exception: allow /auth/confirm and /auth/signout
   if (
     request.nextUrl.pathname.startsWith('/auth/') &&
-    request.nextUrl.pathname !== '/auth/signout'
+    request.nextUrl.pathname !== '/auth/signout' &&
+    request.nextUrl.pathname !== '/auth/confirm'
   ) {
     const { data: { user } } = await supabase.auth.getUser()
     

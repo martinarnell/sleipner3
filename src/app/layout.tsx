@@ -1,5 +1,6 @@
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
+import { ThemeProvider } from '@/components/theme-provider'
 import { mabryPro } from '@/lib/fonts'
 import type { Metadata } from 'next'
 
@@ -75,10 +76,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`dark ${mabryPro.variable}`}>
+    <html lang="en" className={mabryPro.variable} suppressHydrationWarning>
       <body className={mabryPro.className}>
-        {children}
-        <Toaster />
+        <ThemeProvider
+          defaultTheme="dark"
+          storageKey="sleipner-ui-theme"
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )

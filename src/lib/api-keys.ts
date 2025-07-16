@@ -51,6 +51,39 @@ export async function verifyApiKey(apiKey: string): Promise<{ valid: boolean; us
   }
 }
 
+export async function verifyApiKeyById(keyId: string): Promise<{ valid: boolean; userId?: string }> {
+  try {
+    const supabase = await createClient()
+    
+    // Look up the API key by ID and verify it's active
+    const { data, error } = await supabase
+      .from('api_keys')
+      .select('user_id, is_active')
+      .eq('id', keyId)
+      .eq('is_active', true)
+      .single()
+    
+    if (error || !data) {
+      return { valid: false }
+    }
+    
+    // Update last_used_at
+    try {
+      await supabase
+        .from('api_keys')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', keyId)
+    } catch (updateError) {
+      console.warn('Failed to update last_used_at:', updateError)
+    }
+    
+    return { valid: true, userId: data.user_id }
+  } catch (error) {
+    console.error('API key ID verification error:', error)
+    return { valid: false }
+  }
+}
+
 export async function createApiKey(userId: string, name: string) {
   const supabase = await createClient()
   const { key, hash, prefix } = generateApiKey()

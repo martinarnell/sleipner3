@@ -1,9 +1,10 @@
-- [] Invite only users
-- [] Give users credits
+- [x] Invite only users
 - [] Basic chat completions endpoint
     - [] Bring your own key
-    - [] demo page
+    - [] structured output json
+    - [] save requests and setup 
 - [] improve design of magic link email
+- [] Give users credits
 
 - [] limit users with credits (ignore billing for now)
 - [] basic routing framework testable from demo page

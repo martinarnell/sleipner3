@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import DashboardClient from '@/components/DashboardClient'
+import ChatPlayground from '@/components/ChatPlayground'
 import { getUserApiKeys } from '@/lib/api-keys'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export default async function Dashboard() {
   const supabase = await createClient()
@@ -28,6 +30,7 @@ export default async function Dashboard() {
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">{user.email}</span>
+              <ThemeToggle />
               <form action="/auth/signout" method="post">
                 <Button variant="outline" size="sm" type="submit">
                   Sign Out
@@ -67,6 +70,8 @@ export default async function Dashboard() {
           </Card>
 
           <DashboardClient user={user} initialApiKeys={apiKeys} />
+
+          <ChatPlayground apiKeys={apiKeys} />
         </div>
       </main>
     </div>

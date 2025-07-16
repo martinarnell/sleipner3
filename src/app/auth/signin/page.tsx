@@ -50,7 +50,7 @@ function SignInForm() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
           shouldCreateUser: false, // Don't create new users, only allow existing/invited users
         },
       })
