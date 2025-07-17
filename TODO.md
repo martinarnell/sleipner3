@@ -1,8 +1,17 @@
 - [x] Invite only users
 - [] Basic chat completions endpoint
+    - [x] fix basic grader
+    - [] multi thing grader
     - [] Bring your own key
     - [] structured output json
-    - [] save requests and setup 
+    - [] only measure and store real cost incurred in endpoint (leave comparison to dashboard)
+    - [] save requests and so on
+    - [] 
+
+
+
+
+
 - [] improve design of magic link email
 - [] Give users credits
 

@@ -314,7 +314,7 @@ async function callTier0(messages: Message[]) {
   }
 }
 
-// Step 3: Grade Response (Claude Haiku)
+// Step 3: Grade Response (Claude Haiku) - Enhanced with question complexity awareness
 async function gradeResponse(query: string, response: string, systemContext?: string) {
   const startTime = Date.now()
   const anthropicApiKey = process.env.ANTHROPIC_KEY
@@ -327,36 +327,150 @@ async function gradeResponse(query: string, response: string, systemContext?: st
       ? `\nSystem Context/Instructions: "${systemContext}"\n` 
       : ''
 
-    const gradingPrompt = `You are a STRICT response quality grader for premium AI services. Rate the following AI response on a scale of 0-100. Be demanding - only truly excellent responses should score above 85.
+    // First, classify the question complexity
+    const classificationPrompt = `Classify this question into one of these categories based on the expected response complexity:
 
-STRICT CRITERIA:
-- Accuracy and factual correctness (deduct heavily for any errors)
-- Completeness (partial answers should score low)
-- Depth and sophistication of reasoning
-- Perfect adherence to system instructions (if provided)
-- Professional clarity and structure
-- Actionable insights or specific examples
+SIMPLE_FACTUAL: Basic facts, math, definitions, yes/no questions
+- Examples: "What is 2+2?", "Capital of France?", "Define photosynthesis", "Is water wet?"
 
-SCORING GUIDELINES:
-- 90-100: Exceptional depth with specific data, citations, sophisticated analysis that a true expert would provide
-- 80-89: Good structure but generic numbers, superficial analysis, missing expert-level insights  
-- 70-79: Adequate format but lacks substance, uses round numbers without justification
-- 60-69: Basic template response with obvious gaps
-- Below 60: Poor quality, major issues
+EXPLANATORY: How/why questions requiring structured explanations but not deep analysis  
+- Examples: "How does photosynthesis work?", "Why is the sky blue?", "Explain TCP/IP"
 
-RED FLAGS (automatically score below 90):
-- Generic round numbers without data sources ($10M, 15% ROI, etc.)
-- Buzzwords without technical depth ("leverage synergies", "blockchain integration")
-- Missing citations or research backing for claims
-- Superficial competitive analysis
-- Template-like responses that lack specific insights
+ANALYTICAL: Complex reasoning, strategy, business analysis, multi-step problem solving
+- Examples: "Develop a marketing strategy", "Analyze competitive landscape", "Design system architecture"
+
+CREATIVE: Writing, brainstorming, ideation, subjective tasks
+- Examples: "Write a poem", "Generate business ideas", "Create marketing copy"
+
+Question: "${query}"
+
+Respond with only one word: SIMPLE_FACTUAL, EXPLANATORY, ANALYTICAL, or CREATIVE`
+
+    // Get question classification
+    const classificationResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': anthropicApiKey,
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 20,
+        messages: [{ role: 'user', content: classificationPrompt }]
+      })
+    })
+
+    const classificationData = await classificationResponse.json()
+    const questionType = classificationData.content[0]?.text?.trim().toUpperCase() || 'EXPLANATORY'
+
+    // Now create context-appropriate grading criteria
+    let gradingPrompt: string
+    let threshold: number
+
+    if (questionType === 'SIMPLE_FACTUAL') {
+      threshold = 85
+      gradingPrompt = `You are grading a response to a SIMPLE FACTUAL question. Focus on accuracy and appropriateness.
+
+SCORING FOR FACTUAL QUESTIONS:
+- 95-100: Perfectly correct, concise, and directly answers the question
+- 90-94: Correct answer but slightly verbose or includes unnecessary details
+- 80-89: Mostly correct but minor issues (e.g., overly complex for simple question)
+- 70-79: Correct but significant verbosity/complexity issues
+- 60-69: Partially correct or unclear
+- Below 60: Incorrect or doesn't answer the question
+
+KEY CRITERIA:
+✓ Factual accuracy (most important)
+✓ Appropriateness to question complexity
+✓ Directness and clarity
+✗ Don't penalize for lack of citations on basic facts
+✗ Don't expect expert-level analysis for simple questions
 
 ${systemContextSection}
-User Question: "${query}"
+Question: "${query}"
+Response: "${response}"
 
-AI Response: "${response}"
+Rate 0-100:`
 
-Respond with ONLY a number between 0-100. Be extremely strict - assume the user needs expert-level quality.`
+    } else if (questionType === 'EXPLANATORY') {
+      threshold = 87
+      gradingPrompt = `You are grading a response to an EXPLANATORY question that requires structured explanation.
+
+SCORING FOR EXPLANATORY QUESTIONS:
+- 95-100: Comprehensive, accurate explanation with good structure and examples
+- 90-94: Good explanation, mostly complete, well-organized
+- 85-89: Solid explanation but missing some details or examples
+- 80-84: Basic explanation that covers main points but lacks depth
+- 70-79: Incomplete or poorly structured explanation
+- Below 70: Significant gaps or inaccuracies
+
+KEY CRITERIA:
+✓ Accuracy of explanation
+✓ Logical structure and flow
+✓ Appropriate level of detail
+✓ Use of examples when helpful
+✗ Don't expect research citations unless specifically requested
+✗ Don't penalize for not being "expert-level" if explanation is solid
+
+${systemContextSection}
+Question: "${query}"
+Response: "${response}"
+
+Rate 0-100:`
+
+    } else if (questionType === 'ANALYTICAL') {
+      threshold = 90
+      gradingPrompt = `You are grading a response to a COMPLEX ANALYTICAL question requiring sophisticated reasoning.
+
+SCORING FOR ANALYTICAL QUESTIONS:
+- 95-100: Exceptional analysis with specific insights, data, and expert-level reasoning
+- 90-94: Strong analysis with good structure but some generic elements
+- 85-89: Solid analysis but missing depth or specificity in key areas
+- 80-84: Basic analytical framework but lacks sophisticated insights
+- 70-79: Template-like response with obvious analytical gaps
+- Below 70: Poor analysis with major flaws
+
+KEY CRITERIA (STRICT):
+✓ Depth and sophistication of analysis
+✓ Specific examples and data points
+✓ Non-obvious insights and recommendations
+✓ Structured reasoning and logic
+✗ Penalize heavily for buzzwords without substance
+✗ Penalize for generic numbers without justification
+
+${systemContextSection}
+Question: "${query}"
+Response: "${response}"
+
+Rate 0-100:`
+
+    } else { // CREATIVE
+      threshold = 85
+      gradingPrompt = `You are grading a response to a CREATIVE question requiring subjective judgment.
+
+SCORING FOR CREATIVE QUESTIONS:
+- 95-100: Highly creative, engaging, and well-executed for the task
+- 90-94: Good creativity and execution with minor issues
+- 85-89: Solid creative response that meets requirements
+- 80-84: Basic creative response but lacks flair or polish
+- 70-79: Minimal creativity or poorly executed
+- Below 70: Fails to meet creative requirements
+
+KEY CRITERIA:
+✓ Creativity and originality
+✓ Appropriateness to request
+✓ Quality of execution
+✓ Engagement factor
+✗ Don't apply analytical rigor to creative tasks
+✗ Don't penalize for lack of citations in creative writing
+
+${systemContextSection}
+Question: "${query}"
+Response: "${response}"
+
+Rate 0-100:`
+    }
 
     const apiCallStart = Date.now()
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -390,13 +504,14 @@ Respond with ONLY a number between 0-100. Be extremely strict - assume the user 
     
     const inputTokens = data.usage?.input_tokens || 0
     const outputTokens = data.usage?.output_tokens || 0
-    // Claude Haiku pricing: $0.25/1M input tokens, $1.25/1M output tokens
+    // Claude Haiku pricing: $0.25/1M input tokens, $1.25/1M output tokens  
     const cost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000
 
     return {
       score,
-      threshold: 90,
-      passed: score >= 90,
+      threshold,
+      questionType,
+      passed: score >= threshold,
       cost,
       grader: 'claude-3-haiku',
       timing: {
@@ -553,10 +668,11 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
   flowSteps[2].cost = gradeResult.cost
   flowSteps[2].timing = gradeResult.timing
   flowSteps[2].cost_breakdown = gradeResult.cost_breakdown
-  flowSteps[2].details = `Score: ${gradeResult.score}/100 (threshold: ${gradeResult.threshold})${systemContext ? ' - evaluated with system context' : ''}`
+  flowSteps[2].details = `Score: ${gradeResult.score}/100 (threshold: ${gradeResult.threshold}) | Type: ${gradeResult.questionType}${systemContext ? ' - evaluated with system context' : ''}`
   flowSteps[2].score = gradeResult.score
   flowSteps[2].passed = gradeResult.passed && !forceEscalate
-  flowSteps[2].grader_reasoning = `Claude Haiku evaluated the tier-0 response quality${forceEscalate ? ' (manually overridden for testing)' : ''}` // For playground display
+  flowSteps[2].questionType = gradeResult.questionType
+  flowSteps[2].grader_reasoning = `Claude Haiku evaluated the tier-0 response quality (Question type: ${gradeResult.questionType})${forceEscalate ? ' (manually overridden for testing)' : ''}` // For playground display
   
   if (gradeResult.passed && !forceEscalate) {
     // Quality passed - use Tier-0 response
