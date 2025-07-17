@@ -314,225 +314,453 @@ async function callTier0(messages: Message[]) {
   }
 }
 
-// Step 3: Grade Response (Claude Haiku) - Enhanced with question complexity awareness
+// Step 3: Multi-Dimensional Response Grading
 async function gradeResponse(query: string, response: string, systemContext?: string) {
+  const startTime = Date.now()
+  
+  try {
+    // First classify the question
+    const questionType = await classifyQuestion(query, systemContext)
+    
+    // Then evaluate all dimensions
+    const result = await evaluateMultiDimensional(query, response, questionType, systemContext)
+    
+    return {
+      score: result.weightedComposite,
+      passed: result.passed,
+      reasoning: `Multi-dimensional: ${result.dimensionScores.map(d => `${d.dimension}:${d.score}`).join(', ')}`,
+      cost: result.cost,
+      timing: {
+        duration_ms: result.timing,
+        api_call_ms: result.timing,
+        start_time: startTime,
+        end_time: startTime + result.timing
+      },
+      cost_breakdown: result.cost_breakdown,
+      threshold: result.threshold,
+      questionType: result.questionType,
+      dimensionScores: result.dimensionScores,
+      confidence: result.confidence,
+      variance: result.variance,
+      grader: 'multi-dimensional'
+    }
+  } catch (error) {
+    console.error('Multi-dimensional grading error:', error)
+    const fallbackTiming = Date.now() - startTime
+    return {
+      score: 50,
+      passed: false,
+      reasoning: 'Multi-dimensional grading failed',
+      cost: 0,
+      timing: {
+        duration_ms: fallbackTiming,
+        api_call_ms: fallbackTiming,
+        start_time: startTime,
+        end_time: Date.now()
+      },
+      cost_breakdown: {},
+      threshold: 75,
+      questionType: 'ANALYTICAL',
+      dimensionScores: [],
+      confidence: 0,
+      variance: 0,
+      grader: 'multi-dimensional-fallback'
+    }
+  }
+}
+
+// Multi-Dimensional Rubric Scoring System
+interface RubricDimension {
+  name: string;
+  description: string;
+  scale: number;
+  weight: number;
+  evaluationPrompt: string;
+  criteriaMapping: { [scoreRange: string]: string };
+}
+
+interface DimensionScore {
+  dimension: string;
+  score: number;
+  reasoning: string;
+  confidence: number;
+}
+
+interface MultiDimensionalResult {
+  questionType: 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL';
+  dimensionScores: DimensionScore[];
+  weightedComposite: number;
+  confidence: number;
+  variance: number;
+  threshold: number;
+  passed: boolean;
+  cost: number;
+  timing: number;
+  cost_breakdown: any;
+}
+
+const DIMENSIONS: { [key: string]: RubricDimension } = {
+  ACCURACY: {
+    name: "Accuracy",
+    description: "Factual correctness and freedom from errors",
+    scale: 10,
+    weight: 0, // Will be set by question type
+    evaluationPrompt: `Rate the factual accuracy of this response (1-10):
+    - Are all facts correct and verifiable?
+    - Is there any misinformation or errors?
+    - Are numbers, dates, and specific claims accurate?
+    
+    10: Completely accurate, all facts verified
+    8-9: Mostly accurate with minor imprecisions
+    6-7: Some inaccuracies but generally correct
+    4-5: Several inaccuracies present
+    1-3: Major factual errors or misinformation`,
+    criteriaMapping: {
+      "9-10": "Completely accurate, all facts verified",
+      "7-8": "Mostly accurate with minor imprecisions", 
+      "5-6": "Some inaccuracies present",
+      "1-4": "Major factual errors or misinformation"
+    }
+  },
+  COMPLETENESS: {
+    name: "Completeness", 
+    description: "Thoroughness in addressing all aspects of the question",
+    scale: 10,
+    weight: 0,
+    evaluationPrompt: `Rate how completely this response addresses the question (1-10):
+    - Are all parts of the question answered?
+    - Are key aspects covered adequately?
+    - Is important context or information missing?
+    
+    10: Completely comprehensive, all aspects covered
+    8-9: Covers most aspects thoroughly
+    6-7: Covers main points but misses some details
+    4-5: Partially complete, significant gaps
+    1-3: Incomplete, major aspects unaddressed`,
+    criteriaMapping: {
+      "9-10": "Completely comprehensive",
+      "7-8": "Covers most aspects thoroughly",
+      "5-6": "Covers main points but misses details", 
+      "1-4": "Incomplete, major gaps"
+    }
+  },
+  CLARITY: {
+    name: "Clarity",
+    description: "Clear communication and readability",
+    scale: 10, 
+    weight: 0,
+    evaluationPrompt: `Rate the clarity and readability of this response (1-10):
+    - Is the explanation clear and easy to understand?
+    - Is the structure logical and well-organized?
+    - Are complex concepts explained simply?
+    
+    10: Exceptionally clear and well-structured
+    8-9: Clear with good organization
+    6-7: Generally clear but could be clearer
+    4-5: Somewhat unclear or confusing
+    1-3: Very unclear or poorly structured`,
+    criteriaMapping: {
+      "9-10": "Exceptionally clear and well-structured",
+      "7-8": "Clear with good organization",
+      "5-6": "Generally clear but could be clearer",
+      "1-4": "Unclear or poorly structured"
+    }
+  },
+  DEPTH: {
+    name: "Depth",
+    description: "Level of analysis, insight, and sophistication",
+    scale: 10,
+    weight: 0,
+    evaluationPrompt: `Rate the depth and analytical quality of this response (1-10):
+    - Does it provide meaningful insights or analysis?
+    - Is the level of detail appropriate for the question?
+    - Are underlying concepts or implications explored?
+    
+    10: Deep analysis with exceptional insights
+    8-9: Good depth with solid analysis
+    6-7: Moderate depth, some analysis
+    4-5: Surface-level treatment
+    1-3: Very shallow or superficial`,
+    criteriaMapping: {
+      "9-10": "Deep analysis with exceptional insights",
+      "7-8": "Good depth with solid analysis", 
+      "5-6": "Moderate depth, some analysis",
+      "1-4": "Shallow or superficial"
+    }
+  },
+  SAFETY: {
+    name: "Safety",
+    description: "Absence of harmful, biased, or inappropriate content",
+    scale: 10,
+    weight: 0,
+    evaluationPrompt: `Rate the safety and appropriateness of this response (1-10):
+    - Is content free from harmful or dangerous advice?
+    - Are there any ethical concerns or biases?
+    - Is the tone appropriate and respectful?
+    
+    10: Completely safe and appropriate
+    8-9: Safe with minor concerns
+    6-7: Generally safe but some issues
+    4-5: Some safety or ethical concerns
+    1-3: Significant safety risks or inappropriate`,
+    criteriaMapping: {
+      "9-10": "Completely safe and appropriate",
+      "7-8": "Safe with minor concerns",
+      "5-6": "Generally safe but some issues", 
+      "1-4": "Safety or ethical concerns present"
+    }
+  }
+};
+
+const QUESTION_TYPE_WEIGHTS = {
+  FACTUAL: { 
+    accuracy: 0.40, completeness: 0.30, clarity: 0.20, depth: 0.05, safety: 0.05,
+    threshold: 85 // Higher threshold for simple facts
+  },
+  ANALYTICAL: { 
+    accuracy: 0.25, completeness: 0.20, clarity: 0.15, depth: 0.35, safety: 0.05,
+    threshold: 75 // Moderate threshold, depth is key
+  },
+  CREATIVE: { 
+    accuracy: 0.15, completeness: 0.25, clarity: 0.25, depth: 0.25, safety: 0.10,
+    threshold: 70 // Lower threshold, creativity valued
+  },
+  TECHNICAL: { 
+    accuracy: 0.35, completeness: 0.30, clarity: 0.20, depth: 0.10, safety: 0.05,
+    threshold: 80 // High accuracy and completeness needed
+  },
+  ETHICAL: { 
+    accuracy: 0.20, completeness: 0.20, clarity: 0.20, depth: 0.20, safety: 0.20,
+    threshold: 75 // Balanced approach, safety critical
+  }
+};
+
+// Question Classification Function
+async function classifyQuestion(query: string, systemContext?: string): Promise<'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL'> {
+  const anthropicApiKey = process.env.ANTHROPIC_KEY
+  if (!anthropicApiKey) {
+    throw new Error('ANTHROPIC_KEY environment variable not set')
+  }
+
+  const systemContextSection = systemContext 
+    ? `\nSystem Context: "${systemContext}"\n` 
+    : ''
+
+  const classificationPrompt = `Classify this question into ONE of these categories:
+
+FACTUAL: Basic facts, definitions, math, simple "what is" questions
+- Examples: "What is the capital of France?", "What is 2+2?", "When was WWII?"
+- Key: Direct factual answers
+
+ANALYTICAL: Business analysis, strategy, economic evaluation, complex reasoning
+- Examples: "Analyze market trends", "Develop a strategy", "Compare business models", "Evaluate ROI"
+- Key: Requires analytical thinking, data interpretation, strategic reasoning
+- Note: Business strategies are ANALYTICAL, not creative
+
+CREATIVE: Original content creation, artistic expression, storytelling
+- Examples: "Write a poem", "Create a fictional story", "Design an advertisement slogan"
+- Key: Requires imagination and artistic expression, not business analysis
+
+TECHNICAL: Specific technical knowledge, procedures, code, or domain expertise
+- Examples: "How to configure X?", "Debug this code", "Medical diagnosis", "Engineering calculations"
+- Key: Requires specialized technical knowledge
+
+ETHICAL: Questions involving moral judgments, values, or sensitive topics
+- Examples: "Is X right or wrong?", "Should we do Y?", "Political opinions"
+- Key: Involves moral or ethical considerations
+
+Question: "${query}"${systemContextSection}
+
+Important: Business strategies, market analysis, and data-driven decision making are ANALYTICAL, not CREATIVE.
+
+Respond with ONLY the category name: FACTUAL, ANALYTICAL, CREATIVE, TECHNICAL, or ETHICAL`
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 20,
+        messages: [
+          { role: 'user', content: classificationPrompt }
+        ]
+      })
+    })
+
+    if (!response.ok) {
+      console.error('Anthropic API error:', response.status, response.statusText)
+      return 'ANALYTICAL' // Default fallback
+    }
+
+    const data = await response.json()
+    const classification = data.content?.[0]?.text?.trim()?.toUpperCase()
+    
+    if (['FACTUAL', 'ANALYTICAL', 'CREATIVE', 'TECHNICAL', 'ETHICAL'].includes(classification)) {
+      return classification as 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL'
+    }
+    
+    return 'ANALYTICAL' // Default fallback
+  } catch (error) {
+    console.error('Question classification error:', error)
+    return 'ANALYTICAL' // Default fallback
+  }
+}
+
+// Multi-Dimensional Evaluation Function
+async function evaluateMultiDimensional(query: string, response: string, questionType: string, systemContext?: string): Promise<MultiDimensionalResult> {
   const startTime = Date.now()
   const anthropicApiKey = process.env.ANTHROPIC_KEY
   if (!anthropicApiKey) {
     throw new Error('ANTHROPIC_KEY environment variable not set')
   }
 
-  try {
+  const weights = QUESTION_TYPE_WEIGHTS[questionType as keyof typeof QUESTION_TYPE_WEIGHTS]
+  const dimensionScores: DimensionScore[] = []
+  let totalCost = 0
+  let costBreakdown: any = {}
+
+  // Evaluate each dimension in parallel for efficiency
+  const dimensionPromises = Object.entries(DIMENSIONS).map(async ([dimName, dimension]) => {
+    const dimStartTime = Date.now()
+    
     const systemContextSection = systemContext 
-      ? `\nSystem Context/Instructions: "${systemContext}"\n` 
+      ? `\nOriginal System Context: "${systemContext}"\n` 
       : ''
 
-    // First, classify the question complexity
-    const classificationPrompt = `Classify this question into one of these categories based on the expected response complexity:
+    const evaluationPrompt = `${dimension.evaluationPrompt}
 
-SIMPLE_FACTUAL: Basic facts, math, definitions, yes/no questions
-- Examples: "What is 2+2?", "Capital of France?", "Define photosynthesis", "Is water wet?"
+Question Type: ${questionType}
+Original Question: "${query}"${systemContextSection}
+Response to Evaluate: "${response}"
 
-EXPLANATORY: How/why questions requiring structured explanations but not deep analysis  
-- Examples: "How does photosynthesis work?", "Why is the sky blue?", "Explain TCP/IP"
+Provide your evaluation as JSON:
+{
+  "score": <number 1-10>,
+  "reasoning": "<brief explanation of score>",
+  "confidence": <number 0.0-1.0>
+}`
 
-ANALYTICAL: Complex reasoning, strategy, business analysis, multi-step problem solving
-- Examples: "Develop a marketing strategy", "Analyze competitive landscape", "Design system architecture"
-
-CREATIVE: Writing, brainstorming, ideation, subjective tasks
-- Examples: "Write a poem", "Generate business ideas", "Create marketing copy"
-
-Question: "${query}"
-
-Respond with only one word: SIMPLE_FACTUAL, EXPLANATORY, ANALYTICAL, or CREATIVE`
-
-    // Get question classification
-    const classificationResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': anthropicApiKey,
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 20,
-        messages: [{ role: 'user', content: classificationPrompt }]
+    try {
+      const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicApiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 200,
+          messages: [
+            { role: 'user', content: evaluationPrompt }
+          ]
+        })
       })
-    })
 
-    const classificationData = await classificationResponse.json()
-    const questionType = classificationData.content[0]?.text?.trim().toUpperCase() || 'EXPLANATORY'
+      if (!apiResponse.ok) {
+        console.error(`Dimension ${dimName} evaluation failed:`, apiResponse.status)
+        return {
+          dimension: dimName.toLowerCase(),
+          score: 5, // Neutral fallback
+          reasoning: "Evaluation failed - API error",
+          confidence: 0.0
+        }
+      }
 
-    // Now create context-appropriate grading criteria
-    let gradingPrompt: string
-    let threshold: number
-
-    if (questionType === 'SIMPLE_FACTUAL') {
-      threshold = 85
-      gradingPrompt = `You are grading a response to a SIMPLE FACTUAL question. Focus on accuracy and appropriateness.
-
-SCORING FOR FACTUAL QUESTIONS:
-- 95-100: Perfectly correct, concise, and directly answers the question
-- 90-94: Correct answer but slightly verbose or includes unnecessary details
-- 80-89: Mostly correct but minor issues (e.g., overly complex for simple question)
-- 70-79: Correct but significant verbosity/complexity issues
-- 60-69: Partially correct or unclear
-- Below 60: Incorrect or doesn't answer the question
-
-KEY CRITERIA:
-✓ Factual accuracy (most important)
-✓ Appropriateness to question complexity
-✓ Directness and clarity
-✗ Don't penalize for lack of citations on basic facts
-✗ Don't expect expert-level analysis for simple questions
-
-${systemContextSection}
-Question: "${query}"
-Response: "${response}"
-
-Rate 0-100:`
-
-    } else if (questionType === 'EXPLANATORY') {
-      threshold = 87
-      gradingPrompt = `You are grading a response to an EXPLANATORY question that requires structured explanation.
-
-SCORING FOR EXPLANATORY QUESTIONS:
-- 95-100: Comprehensive, accurate explanation with good structure and examples
-- 90-94: Good explanation, mostly complete, well-organized
-- 85-89: Solid explanation but missing some details or examples
-- 80-84: Basic explanation that covers main points but lacks depth
-- 70-79: Incomplete or poorly structured explanation
-- Below 70: Significant gaps or inaccuracies
-
-KEY CRITERIA:
-✓ Accuracy of explanation
-✓ Logical structure and flow
-✓ Appropriate level of detail
-✓ Use of examples when helpful
-✗ Don't expect research citations unless specifically requested
-✗ Don't penalize for not being "expert-level" if explanation is solid
-
-${systemContextSection}
-Question: "${query}"
-Response: "${response}"
-
-Rate 0-100:`
-
-    } else if (questionType === 'ANALYTICAL') {
-      threshold = 90
-      gradingPrompt = `You are grading a response to a COMPLEX ANALYTICAL question requiring sophisticated reasoning.
-
-SCORING FOR ANALYTICAL QUESTIONS:
-- 95-100: Exceptional analysis with specific insights, data, and expert-level reasoning
-- 90-94: Strong analysis with good structure but some generic elements
-- 85-89: Solid analysis but missing depth or specificity in key areas
-- 80-84: Basic analytical framework but lacks sophisticated insights
-- 70-79: Template-like response with obvious analytical gaps
-- Below 70: Poor analysis with major flaws
-
-KEY CRITERIA (STRICT):
-✓ Depth and sophistication of analysis
-✓ Specific examples and data points
-✓ Non-obvious insights and recommendations
-✓ Structured reasoning and logic
-✗ Penalize heavily for buzzwords without substance
-✗ Penalize for generic numbers without justification
-
-${systemContextSection}
-Question: "${query}"
-Response: "${response}"
-
-Rate 0-100:`
-
-    } else { // CREATIVE
-      threshold = 85
-      gradingPrompt = `You are grading a response to a CREATIVE question requiring subjective judgment.
-
-SCORING FOR CREATIVE QUESTIONS:
-- 95-100: Highly creative, engaging, and well-executed for the task
-- 90-94: Good creativity and execution with minor issues
-- 85-89: Solid creative response that meets requirements
-- 80-84: Basic creative response but lacks flair or polish
-- 70-79: Minimal creativity or poorly executed
-- Below 70: Fails to meet creative requirements
-
-KEY CRITERIA:
-✓ Creativity and originality
-✓ Appropriateness to request
-✓ Quality of execution
-✓ Engagement factor
-✗ Don't apply analytical rigor to creative tasks
-✗ Don't penalize for lack of citations in creative writing
-
-${systemContextSection}
-Question: "${query}"
-Response: "${response}"
-
-Rate 0-100:`
-    }
-
-    const apiCallStart = Date.now()
-    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': anthropicApiKey,
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 10,
-        messages: [
-          {
-            role: 'user',
-            content: gradingPrompt
-          }
-        ]
-      })
-    })
-
-    if (!anthropicResponse.ok) {
-      throw new Error(`Anthropic API error: ${anthropicResponse.status} ${anthropicResponse.statusText}`)
-    }
-
-    const data = await anthropicResponse.json()
-    const endTime = Date.now()
-    
-    const scoreText = data.content[0]?.text || '50'
-    const score = Math.max(0, Math.min(100, parseInt(scoreText.trim()) || 50))
-    
-    const inputTokens = data.usage?.input_tokens || 0
-    const outputTokens = data.usage?.output_tokens || 0
-    // Claude Haiku pricing: $0.25/1M input tokens, $1.25/1M output tokens  
-    const cost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000
-
-    return {
-      score,
-      threshold,
-      questionType,
-      passed: score >= threshold,
-      cost,
-      grader: 'claude-3-haiku',
-      timing: {
-        duration_ms: endTime - startTime,
-        api_call_ms: endTime - apiCallStart,
-        start_time: startTime,
-        end_time: endTime
-      },
-      cost_breakdown: {
+      const data = await apiResponse.json()
+      const content = data.content?.[0]?.text?.trim()
+      
+      // Calculate cost for this dimension
+      const inputTokens = data.usage?.input_tokens || 0
+      const outputTokens = data.usage?.output_tokens || 0
+      const dimCost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000 // Claude Haiku pricing
+      totalCost += dimCost
+      costBreakdown[dimName] = {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
-        input_cost_per_1m: 0.25,
-        output_cost_per_1m: 1.25,
-        input_cost: (inputTokens * 0.00025) / 1000,
-        output_cost: (outputTokens * 0.00125) / 1000,
-        total_cost: cost
+        cost: dimCost
+      }
+
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          return {
+            dimension: dimName.toLowerCase(),
+            score: Math.max(1, Math.min(10, parsed.score || 5)),
+            reasoning: parsed.reasoning || "No reasoning provided",
+            confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5))
+          }
+        }
+      } catch (parseError) {
+        console.error(`Failed to parse dimension ${dimName} response:`, parseError)
+      }
+
+      // Fallback parsing
+      const scoreMatch = content.match(/score["\s]*:[\s]*(\d+)/i)
+      const score = scoreMatch ? parseInt(scoreMatch[1]) : 5
+      
+      return {
+        dimension: dimName.toLowerCase(),
+        score: Math.max(1, Math.min(10, score)),
+        reasoning: "Parsed from partial response",
+        confidence: 0.5
+      }
+
+    } catch (error) {
+      console.error(`Dimension ${dimName} evaluation error:`, error)
+      return {
+        dimension: dimName.toLowerCase(),
+        score: 5,
+        reasoning: "Evaluation failed - network error",
+        confidence: 0.0
       }
     }
-  } catch (error) {
-    console.error('Anthropic API call failed:', error)
-    throw new Error('Failed to grade response with Claude Haiku')
+  })
+
+  // Wait for all dimension evaluations to complete
+  const results = await Promise.all(dimensionPromises)
+  dimensionScores.push(...results)
+
+  // Calculate weighted composite score
+  let weightedSum = 0
+  let totalWeight = 0
+  let confidenceSum = 0
+  let variance = 0
+
+  dimensionScores.forEach(dimScore => {
+    const weight = weights[dimScore.dimension as keyof typeof weights] || 0
+    weightedSum += dimScore.score * weight
+    totalWeight += weight
+    confidenceSum += dimScore.confidence
+  })
+
+  const weightedComposite = totalWeight > 0 ? (weightedSum / totalWeight) * 10 : 50 // Scale to 100
+  const avgConfidence = dimensionScores.length > 0 ? confidenceSum / dimensionScores.length : 0.5
+
+  // Calculate variance to measure consistency
+  const avgScore = dimensionScores.reduce((sum, d) => sum + d.score, 0) / dimensionScores.length
+  variance = dimensionScores.reduce((sum, d) => sum + Math.pow(d.score - avgScore, 2), 0) / dimensionScores.length
+
+  const threshold = weights.threshold
+  const passed = weightedComposite >= threshold
+
+  return {
+    questionType: questionType as 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL',
+    dimensionScores,
+    weightedComposite: Math.round(weightedComposite * 10) / 10, // Round to 1 decimal
+    confidence: Math.round(avgConfidence * 100) / 100, // Round to 2 decimals
+    variance: Math.round(variance * 10) / 10, // Round to 1 decimal
+    threshold,
+    passed,
+    cost: totalCost,
+    timing: Date.now() - startTime,
+    cost_breakdown: costBreakdown
   }
 }
 
@@ -668,11 +896,15 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
   flowSteps[2].cost = gradeResult.cost
   flowSteps[2].timing = gradeResult.timing
   flowSteps[2].cost_breakdown = gradeResult.cost_breakdown
-  flowSteps[2].details = `Score: ${gradeResult.score}/100 (threshold: ${gradeResult.threshold}) | Type: ${gradeResult.questionType}${systemContext ? ' - evaluated with system context' : ''}`
+  flowSteps[2].details = `Score: ${gradeResult.score}/100 (threshold: ${gradeResult.threshold}) | Type: ${gradeResult.questionType} | Confidence: ${gradeResult.confidence} | Variance: ${gradeResult.variance}${systemContext ? ' - evaluated with system context' : ''}`
   flowSteps[2].score = gradeResult.score
   flowSteps[2].passed = gradeResult.passed && !forceEscalate
   flowSteps[2].questionType = gradeResult.questionType
-  flowSteps[2].grader_reasoning = `Claude Haiku evaluated the tier-0 response quality (Question type: ${gradeResult.questionType})${forceEscalate ? ' (manually overridden for testing)' : ''}` // For playground display
+  flowSteps[2].dimensionScores = gradeResult.dimensionScores
+  flowSteps[2].confidence = gradeResult.confidence
+  flowSteps[2].variance = gradeResult.variance
+  flowSteps[2].threshold = gradeResult.threshold
+  flowSteps[2].grader_reasoning = `Multi-dimensional evaluation by Claude Haiku (Question type: ${gradeResult.questionType})${forceEscalate ? ' (manually overridden for testing)' : ''}` // For playground display
   
   if (gradeResult.passed && !forceEscalate) {
     // Quality passed - use Tier-0 response
