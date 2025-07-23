@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -159,7 +160,7 @@ const DEMO_EXAMPLES = [
   }
 ]
 
-async function callSleipnerAPI(apiKeyId: string, model: string, systemPrompt: string, userMessage: string, forceEscalate: boolean = false) {
+async function callSleipnerAPI(apiKeyId: string, model: string, systemPrompt: string, userMessage: string, forceEscalate: boolean = false, openaiKey?: string) {
   const messages = []
   
   if (systemPrompt.trim()) {
@@ -178,12 +179,19 @@ async function callSleipnerAPI(apiKeyId: string, model: string, systemPrompt: st
     ? '/api/v1/chat/completions?debug=full&force_escalate=true'
     : '/api/v1/chat/completions?debug=full'
 
+  const headers: Record<string, string> = {
+    'X-API-Key-ID': apiKeyId,
+    'Content-Type': 'application/json',
+  }
+
+  // Add OpenAI key header if provided (for BYOK)
+  if (openaiKey?.trim()) {
+    headers['X-OpenAI-Key'] = openaiKey.trim()
+  }
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'X-API-Key-ID': apiKeyId,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       model: model,
       messages: messages
@@ -364,6 +372,7 @@ function ValueProposition({ response }: { response: ChatResponse | null }) {
 
 export default function ChatPlayground({ apiKeys }: ChatPlaygroundProps) {
   const [selectedApiKey, setSelectedApiKey] = useState<string>('')
+  const [openaiKey, setOpenaiKey] = useState<string>('')
   const [systemPrompt, setSystemPrompt] = useState('')
   const [userMessage, setUserMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -411,7 +420,7 @@ export default function ChatPlayground({ apiKeys }: ChatPlaygroundProps) {
              // Check if this is the force escalation test
              const shouldForceEscalate = userMessage.trim() === "What is 2+2?" && systemPrompt.trim() === "You are a helpful assistant."
              
-             const result = await callSleipnerAPI(selectedApiKey, 'gpt-4', systemPrompt, userMessage, shouldForceEscalate)
+             const result = await callSleipnerAPI(selectedApiKey, 'gpt-4', systemPrompt, userMessage, shouldForceEscalate, openaiKey)
        setResponse(result)
        
        // Map API response to generic step names for public demo
@@ -481,6 +490,23 @@ export default function ChatPlayground({ apiKeys }: ChatPlaygroundProps) {
               <div className="px-3 py-2 border border-input bg-muted rounded-md text-sm text-muted-foreground">
                 gpt-4 (automatically optimized)
               </div>
+            </div>
+          </div>
+
+          {/* BYOK Section */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              OpenAI API Key (Optional - Bring Your Own Key)
+            </label>
+            <Input
+              type="password"
+              value={openaiKey}
+              onChange={(e) => setOpenaiKey(e.target.value)}
+              placeholder="sk-... (optional - leave blank to use system fallback)"
+            />
+            <div className="text-xs text-muted-foreground mt-1">
+              💡 Provide your own OpenAI API key for direct billing and unlimited usage. 
+              Leave blank to use the system fallback key with shared quotas.
             </div>
           </div>
 

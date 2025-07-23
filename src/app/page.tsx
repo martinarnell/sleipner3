@@ -7,7 +7,7 @@ import { Testimonials } from "@/components/landing/Testimonials";
 import { Pricing } from "@/components/landing/Pricing";
 import { FAQ } from "@/components/landing/FAQ";
 import { CTA } from "@/components/landing/CTA";
-import { TrustedBy } from "@/components/landing/TrustedBy";
+
 import { AnimateOnScroll } from "@/components/landing/AnimateOnScroll";
 
 export default function Home() {
@@ -46,9 +46,7 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
-        <AnimateOnScroll>
-          <TrustedBy />
-        </AnimateOnScroll>
+
         <AnimateOnScroll>
           <Features />
         </AnimateOnScroll>

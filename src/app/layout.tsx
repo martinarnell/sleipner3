@@ -1,6 +1,5 @@
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
-import { ThemeProvider } from '@/components/theme-provider'
 import { mabryPro } from '@/lib/fonts'
 import type { Metadata } from 'next'
 
@@ -33,6 +32,21 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://sleipner.ai'),
   alternates: {
     canonical: '/',
+  },
+  icons: {
+    icon: [
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+    other: [
+      {
+        rel: 'manifest',
+        url: '/site.webmanifest',
+      },
+    ],
   },
   openGraph: {
     type: 'website',
@@ -76,15 +90,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={mabryPro.variable} suppressHydrationWarning>
+    <html lang="en" className={`${mabryPro.variable} dark`} suppressHydrationWarning>
       <body className={mabryPro.className}>
-        <ThemeProvider
-          defaultTheme="dark"
-          storageKey="sleipner-ui-theme"
-        >
-          {children}
-          <Toaster />
-        </ThemeProvider>
+        {children}
+        <Toaster />
       </body>
     </html>
   )

@@ -1,7 +1,7 @@
 - [x] Invite only users
 - [] Basic chat completions endpoint
     - [x] fix basic grader
-    - [] multi thing grader
+    - [x] multi thing grader
     - [] Bring your own key
     - [] structured output json
     - [] only measure and store real cost incurred in endpoint (leave comparison to dashboard)

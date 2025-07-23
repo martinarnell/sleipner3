@@ -39,11 +39,15 @@ export default function SignUp() {
               <div className="text-center">
                 <h3 className="font-medium mb-2">Need access?</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Contact our team to request an invitation to Sleipner.
+                  Join our private beta and help shape the future of AI cost optimization.
                 </p>
                 <Button variant="outline" className="w-full" asChild>
-                  <a href="mailto:martin@sleipner.ai?subject=Request Access to Sleipner">
-                    Request Invitation
+                  <a 
+                    href="https://forms.gle/2r1R3BbCbC4fNnrr9"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Request Beta Access
                   </a>
                 </Button>
               </div>

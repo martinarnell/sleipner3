@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { Aurora } from '@/components/Aurora';
 
 const steps = [
   {
@@ -27,11 +28,12 @@ export const HowItWorks = () => {
   // };
 
   return (
-    <section className="py-20 bg-background/80">
-      <div className="container mx-auto px-4">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold">How It Works</h2>
-          <p className="text-muted-foreground text-lg mt-2">
+    <section className="relative py-24 bg-gradient-to-b from-background/80 to-background overflow-hidden">
+      <Aurora variant="minimal" overlay overlayOpacity={2} />
+      <div className="relative container mx-auto px-6 z-10">
+        <div className="text-center mb-20">
+          <h2 className="text-4xl md:text-5xl font-bold mb-4">How It Works</h2>
+          <p className="text-muted-foreground text-xl max-w-2xl mx-auto leading-relaxed">
             Start saving in just three simple steps.
           </p>
         </div>
@@ -49,13 +51,13 @@ export const HowItWorks = () => {
               transition={{ duration: 0.5, delay: i * 0.2 }}
             >
               <div className={`text-center md:text-left ${i % 2 !== 0 ? 'md:order-2' : ''}`}>
-                <div className="flex items-center justify-center md:justify-start gap-4 mb-4">
-                  <div className="bg-primary text-primary-foreground h-12 w-12 rounded-full flex items-center justify-center font-bold text-xl border-4 border-background">
+                <div className="flex items-center justify-center md:justify-start gap-6 mb-6">
+                  <div className="bg-primary text-primary-foreground h-16 w-16 rounded-full flex items-center justify-center font-bold text-2xl border-4 border-background shadow-lg shadow-primary/20">
                     {step.step}
                   </div>
-                  <h3 className="text-3xl font-bold">{step.title}</h3>
+                  <h3 className="text-2xl md:text-3xl font-bold">{step.title}</h3>
                 </div>
-                <p className="text-muted-foreground text-lg">{step.description}</p>
+                <p className="text-muted-foreground text-lg md:text-xl leading-relaxed max-w-lg">{step.description}</p>
               </div>
               <div className={`hidden md:block ${i % 2 !== 0 ? 'md:order-1' : ''}`} />
             </motion.div>

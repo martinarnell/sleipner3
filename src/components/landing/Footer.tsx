@@ -1,14 +1,21 @@
 import Link from 'next/link'
-import { Logo } from './icons'
-import { ThemeToggle } from '@/components/theme-toggle'
+import Image from 'next/image'
+import { Aurora } from '@/components/Aurora'
 
 export const Footer = () => {
   return (
-    <footer className="bg-background border-t">
-      <div className="container mx-auto px-4 py-8">
+    <footer className="relative bg-background border-t overflow-hidden">
+      <Aurora variant="dark" overlay overlayOpacity={15} />
+      <div className="relative container mx-auto px-4 py-8 z-10">
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
-            <Logo className="h-6 w-6 text-primary" />
+            <Image 
+              src="/sleipner_sleipner_logo_symbol.svg" 
+              alt="Sleipner.ai Symbol" 
+              width={24} 
+              height={24}
+              className="h-6 w-6"
+            />
             <span className="font-bold">Sleipner.ai</span>
           </div>
           
@@ -24,10 +31,6 @@ export const Footer = () => {
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Sleipner.ai. All rights reserved.
             </p>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
           </div>
         </div>
       </div>

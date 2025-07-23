@@ -396,7 +396,7 @@ interface MultiDimensionalResult {
   passed: boolean;
   cost: number;
   timing: number;
-  cost_breakdown: any;
+  cost_breakdown: Record<string, unknown>;
 }
 
 const DIMENSIONS: { [key: string]: RubricDimension } = {
@@ -622,12 +622,10 @@ async function evaluateMultiDimensional(query: string, response: string, questio
   const weights = QUESTION_TYPE_WEIGHTS[questionType as keyof typeof QUESTION_TYPE_WEIGHTS]
   const dimensionScores: DimensionScore[] = []
   let totalCost = 0
-  let costBreakdown: any = {}
+  const costBreakdown: Record<string, unknown> = {}
 
   // Evaluate each dimension in parallel for efficiency
   const dimensionPromises = Object.entries(DIMENSIONS).map(async ([dimName, dimension]) => {
-    const dimStartTime = Date.now()
-    
     const systemContextSection = systemContext 
       ? `\nOriginal System Context: "${systemContext}"\n` 
       : ''
@@ -764,53 +762,145 @@ Provide your evaluation as JSON:
   }
 }
 
-// Step 4: Tier-1 Model (GPT-4) - now takes compressed messages
-async function callTier1(messages: Message[], requestedModel: string, compressionData?: CompressionResult) {
+// Step 4: Tier-1 Model (GPT-4) - now takes compressed messages and optional OpenAI key
+async function callTier1(messages: Message[], requestedModel: string, compressionData?: CompressionResult, openaiKey?: string) {
   const startTime = Date.now()
-  // TODO: Replace with actual OpenAI GPT-4 API call
-  const processedMessages = processMessages(messages)
-  const lastMessage = processedMessages.lastUserMessage
   
-  // Simulate API call timing
-  await new Promise(resolve => setTimeout(resolve, 800))
-  const endTime = Date.now()
-  
-  // Calculate tokens based on compressed input if available
-  const effectiveTokens = compressionData?.compressedTokens || Math.ceil(lastMessage.length / 4)
-  const promptTokens = effectiveTokens
-  const completionTokens = 40
-  // GPT-4 pricing: $10/1M input tokens, $30/1M output tokens
-  const inputCost = (promptTokens * 0.01) / 1000
-  const outputCost = (completionTokens * 0.03) / 1000
-  const totalCost = inputCost + outputCost
-  
-  const compressionInfo = compressionData 
-    ? ` (compressed from ${compressionData.originalTokens} to ${compressionData.compressedTokens} tokens, ${Math.round(compressionData.totalCompressionRatio * 100)}% reduction)`
-    : ''
-  
-  return {
-    content: `[TIER-1 ${requestedModel} Response] This is a high-quality, detailed response that handles complex queries with sophisticated reasoning. System context: ${processedMessages.hasSystemPrompt ? 'Applied' : 'None'}${compressionInfo}`,
-    promptTokens,
-    completionTokens,
-    cost: totalCost,
-    processedMessages,
-    compressionData,
-    timing: {
-      duration_ms: endTime - startTime,
-      api_call_ms: endTime - startTime - 50, // Simulated processing overhead
-      start_time: startTime,
-      end_time: endTime
-    },
-    cost_breakdown: {
-      input_tokens: promptTokens,
-      output_tokens: completionTokens,
-      input_cost_per_1m: 10.00,
-      output_cost_per_1m: 30.00,
-      input_cost: inputCost,
-      output_cost: outputCost,
-      total_cost: totalCost
-    }
+  // Determine which OpenAI API key to use (priority: parameter > env fallback)
+  const apiKey = openaiKey || process.env.OPENAI_FALLBACK_KEY
+  if (!apiKey) {
+    throw new Error('No OpenAI API key available - please provide your own key or contact support')
   }
+
+  try {
+    const processedMessages = processMessages(messages)
+    const apiMessages = buildMessagesForAPI(
+      processedMessages.systemPrompts, 
+      processedMessages.conversationMessages
+    )
+
+    // Map requested model to actual OpenAI model
+    const openaiModel = mapToOpenAIModel(requestedModel)
+
+    const apiCallStart = Date.now()
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: openaiModel,
+        messages: apiMessages,
+        temperature: 0.1,
+        max_tokens: 4000,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      let errorMessage = `OpenAI API error: ${response.status} ${response.statusText}`
+      
+      try {
+        const errorData = JSON.parse(errorText)
+        if (errorData.error?.message) {
+          errorMessage = `OpenAI API error: ${errorData.error.message}`
+        }
+      } catch {
+        // Keep the generic error message
+      }
+      
+      throw new Error(errorMessage)
+    }
+
+    const data = await response.json()
+    const endTime = Date.now()
+    
+    const content = data.choices[0]?.message?.content || ''
+    const usage = data.usage || {}
+    const promptTokens = usage.prompt_tokens || 0
+    const completionTokens = usage.completion_tokens || 0
+    
+    // OpenAI pricing: $10/1M input tokens, $30/1M output tokens for GPT-4
+    const inputCostPer1M = getInputCostPer1M(openaiModel)
+    const outputCostPer1M = getOutputCostPer1M(openaiModel)
+    const inputCost = (promptTokens * inputCostPer1M) / 1000000
+    const outputCost = (completionTokens * outputCostPer1M) / 1000000
+    const totalCost = inputCost + outputCost
+
+    return {
+      content,
+      promptTokens,
+      completionTokens,
+      cost: totalCost,
+      processedMessages,
+      compressionData,
+      timing: {
+        duration_ms: endTime - startTime,
+        api_call_ms: endTime - apiCallStart,
+        start_time: startTime,
+        end_time: endTime
+      },
+      cost_breakdown: {
+        input_tokens: promptTokens,
+        output_tokens: completionTokens,
+        input_cost_per_1m: inputCostPer1M,
+        output_cost_per_1m: outputCostPer1M,
+        input_cost: inputCost,
+        output_cost: outputCost,
+        total_cost: totalCost
+      },
+      openai_model_used: openaiModel,
+      key_source: openaiKey ? 'user_provided' : 'system_fallback'
+    }
+  } catch (error) {
+    console.error('OpenAI API call failed:', error)
+    if (error instanceof Error) {
+      throw error
+    }
+    throw new Error('Failed to call OpenAI API')
+  }
+}
+
+// Helper function to map requested model names to actual OpenAI model names
+function mapToOpenAIModel(requestedModel: string): string {
+  const modelMap: { [key: string]: string } = {
+    'gpt-4': 'gpt-4-0125-preview',
+    'gpt-4-turbo': 'gpt-4-0125-preview', 
+    'gpt-4o': 'gpt-4o',
+    'gpt-4o-mini': 'gpt-4o-mini',
+    'gpt-3.5-turbo': 'gpt-4o-mini', // Upgrade 3.5 requests to 4o-mini for better quality
+    'o1-preview': 'o1-preview',
+    'o1-mini': 'o1-mini'
+  }
+  
+  return modelMap[requestedModel] || 'gpt-4o-mini' // Default to gpt-4o-mini
+}
+
+// Helper function to get input cost per 1M tokens for different models
+function getInputCostPer1M(model: string): number {
+  const costs: { [key: string]: number } = {
+    'gpt-4-0125-preview': 10.00,
+    'gpt-4o': 2.50,
+    'gpt-4o-mini': 0.15,
+    'o1-preview': 15.00,
+    'o1-mini': 3.00
+  }
+  
+  return costs[model] || 2.50 // Default to gpt-4o pricing
+}
+
+// Helper function to get output cost per 1M tokens for different models  
+function getOutputCostPer1M(model: string): number {
+  const costs: { [key: string]: number } = {
+    'gpt-4-0125-preview': 30.00,
+    'gpt-4o': 10.00,
+    'gpt-4o-mini': 0.60,
+    'o1-preview': 60.00,
+    'o1-mini': 12.00
+  }
+  
+  return costs[model] || 10.00 // Default to gpt-4o pricing
 }
 
 // Step 5: Cache Response
@@ -824,7 +914,7 @@ async function cacheResponse(queryHash: string, response: string) {
 }
 
 // Main Cascade Flow  
-async function runCascadeFlow(messages: Message[], requestedModel: string, forceEscalate: boolean = false) {
+async function runCascadeFlow(messages: Message[], requestedModel: string, forceEscalate: boolean = false, openaiKey?: string) {
   const flowStartTime = Date.now()
   let processedMessages
   
@@ -938,7 +1028,7 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
       content: msg.content // For now, keep original until we implement per-message compression
     }))
     
-    const tier1Result = await callTier1(compressedMessages, requestedModel, compressionResult)
+    const tier1Result = await callTier1(compressedMessages, requestedModel, compressionResult, openaiKey)
     totalCost += tier1Result.cost
     costBreakdown.tier1_generation = tier1Result.cost
     timingBreakdown.tier1_generation_ms = tier1Result.timing.duration_ms
@@ -1000,6 +1090,9 @@ export async function POST(request: NextRequest) {
     const apiKeyId = request.headers.get('x-api-key-id')
     const authHeader = request.headers.get('authorization')
     
+    // Check for optional OpenAI API key header (for BYOK - Bring Your Own Key)
+    const openaiKeyHeader = request.headers.get('x-openai-key')
+    
     let userId: string
 
     if (apiKeyId) {
@@ -1042,7 +1135,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Run Sleipner's cascade flow
-    const cascadeResult = await runCascadeFlow(messages as Message[], model, forceEscalate)
+    const cascadeResult = await runCascadeFlow(messages as Message[], model, forceEscalate, openaiKeyHeader || undefined)
     
     const promptTokens = (messages as Message[]).reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0)
     const completionTokens = Math.ceil((cascadeResult.response || '').length / 4)
