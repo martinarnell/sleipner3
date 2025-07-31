@@ -46,12 +46,12 @@ export const Features = () => {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-12">
           {features.map(({ icon: Icon, title, desc, metric }) => (
             <div
               key={title}
-              className="rounded-2xl bg-slate-900/60 p-6 ring-1 ring-slate-800/50
-                         hover:ring-slate-600 hover:-translate-y-1 transition transform w-64 lg:w-72 mx-auto"
+              className="rounded-2xl bg-slate-900/60 p-4 sm:p-6 ring-1 ring-slate-800/50
+                         hover:ring-slate-600 hover:-translate-y-1 transition transform w-full max-w-sm mx-auto"
             >
               <div className="h-11 w-11 flex items-center justify-center
                               rounded-full bg-slate-800 ring-1 ring-cyan-500/30">

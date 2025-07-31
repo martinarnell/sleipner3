@@ -65,22 +65,22 @@ export const Testimonials = () => {
         </div>
 
         {/* Testimonials */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-5xl mx-auto mb-8 sm:mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 max-w-5xl mx-auto mb-8 sm:mb-12">
           {testimonials.map((testimonial, i) => (
-            <Card key={i} className="bg-background/80 backdrop-blur-sm border-primary/20 p-4 sm:p-6">
+            <Card key={i} className="bg-background/80 backdrop-blur-sm border-primary/20 p-3 sm:p-4 lg:p-6">
               <CardContent className="p-0">
-                <blockquote className="text-base sm:text-lg leading-relaxed mb-4 sm:mb-6">
+                <blockquote className="text-sm sm:text-base lg:text-lg leading-relaxed mb-3 sm:mb-4 lg:mb-6">
                   &quot;{testimonial.quote}&quot;
                 </blockquote>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                    <span className="text-primary font-bold text-lg">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/20 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary font-bold text-base sm:text-lg">
                       {testimonial.author.charAt(0)}
                     </span>
                   </div>
-                  <div>
-                    <div className="font-semibold">{testimonial.author}</div>
-                    <div className="text-sm text-muted-foreground">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm sm:text-base">{testimonial.author}</div>
+                    <div className="text-xs sm:text-sm text-muted-foreground">
                       {testimonial.role}, {testimonial.company}
                     </div>
                   </div>

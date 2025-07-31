@@ -32,14 +32,14 @@ export const Problem = () => {
           </h2>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-14 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 lg:gap-14 max-w-5xl mx-auto">
           {problems.map((problem, i) => {
             const Icon = problem.icon;
             return (
               <div
                 key={i}
-                className="text-center bg-slate-900/60 p-6 rounded-2xl ring-1 ring-slate-700/50 
-                           hover:-translate-y-1 transition-transform w-72 mx-auto"
+                className="text-center bg-slate-900/60 p-4 sm:p-6 rounded-2xl ring-1 ring-slate-700/50 
+                           hover:-translate-y-1 transition-transform w-full max-w-sm mx-auto"
               >
                 <div className="mx-auto mb-4 p-3 rounded-full bg-slate-800 w-fit ring-1 ring-slate-700/50">
                   <Icon className="h-6 w-6 stroke-[2] stroke-red-500 mx-auto" />

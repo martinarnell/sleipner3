@@ -25,8 +25,8 @@ export const Hero = () => {
         </div>
         
         {/* Optimized headline with improved wrap control */}
-        <h1 className="text-3xl sm:text-5xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-b from-foreground to-foreground/80 bg-clip-text text-transparent leading-tight mb-6 max-w-[880px] lg:max-w-none mx-auto">
-          Cut Your AI Bill 75%—<span className="text-primary">Automatically.</span>
+        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-b from-foreground to-foreground/80 bg-clip-text text-transparent leading-tight mb-6 max-w-4xl mx-auto px-2 sm:px-0">
+          Cut Your AI Bill 75%—<span className="text-primary whitespace-nowrap">Automatically.</span>
         </h1>
         
         {/* Enhanced sub-headline with improved scan-ability */}
@@ -53,7 +53,7 @@ export const Hero = () => {
             asChild 
             size="lg" 
             variant="outline" 
-            className="text-lg px-8 py-6 h-auto bg-transparent border border-white/20 hover:bg-white/5 transition-all duration-200"
+            className="text-lg px-8 bg-transparent border border-white/20 hover:bg-white/5 transition-all duration-200"
           >
             <Link href="/#how-it-works" className="flex items-center gap-2">
               → How it works
