@@ -8,6 +8,7 @@ import { Testimonials } from "@/components/landing/Testimonials";
 import { Pricing } from "@/components/landing/Pricing";
 import { FAQ } from "@/components/landing/FAQ";
 import { CTA } from "@/components/landing/CTA";
+import { ZeroRisk } from "@/components/landing/ZeroRisk";
 
 export default function Home() {
   const structuredData = {
@@ -48,6 +49,7 @@ export default function Home() {
         <Problem />
         <HowItWorks />
         <Features />
+        <ZeroRisk />
         <Pricing />
         <Testimonials />
         <FAQ />

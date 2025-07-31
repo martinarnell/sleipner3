@@ -1,62 +1,89 @@
+'use client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Aurora } from '@/components/Aurora'
+import { CTAButton } from '@/components/ui/cta-button'
+import { BetaAccessModal } from '@/components/BetaAccessModal'
+import { useState } from 'react'
 
 export const Hero = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
   return (
-    <section className="relative min-h-screen flex items-center justify-center bg-background overflow-hidden">
-      {/* Aurora Background */}
-      <Aurora variant="minimal" overlay overlayOpacity={5} />
-      
-      <div className="relative container mx-auto px-6 text-center max-w-6xl z-10">
-        <div className="mb-8">
-          <a 
-            href="https://forms.gle/2r1R3BbCbC4fNnrr9"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-primary/10 hover:bg-primary/15 border border-primary/20 rounded-full px-5 py-2.5 text-sm font-medium text-primary transition-all duration-200"
+    <section className="relative min-h-screen flex items-center justify-center bg-black overflow-hidden">
+      <div className="relative container mx-auto px-6 text-center max-w-6xl pt-8">
+        {/* Refined badge with tag-like styling */}
+        <div className="mb-12">
+          <CTAButton 
+            size="sm"
+            aurora="badge"
+            onClick={() => setIsModalOpen(true)}
+            className="border border-primary/20 rounded-full text-xs font-medium transition-all duration-200 gap-2 px-4 py-2 tracking-wide"
           >
-            <span className="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
-            Join Private Beta • Limited Access
-          </a>
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+            Private Beta — Join the Waitlist
+          </CTAButton>
         </div>
         
-        <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold bg-gradient-to-b from-foreground to-foreground/80 bg-clip-text text-transparent leading-tight mb-6 sm:mb-8">
-          Intelligent AI Gateway<br />
-          <span className="text-primary">75% Cost Reduction</span>
+        {/* Optimized headline with improved wrap control */}
+        <h1 className="text-3xl sm:text-5xl md:text-5xl lg:text-6xl font-bold bg-gradient-to-b from-foreground to-foreground/80 bg-clip-text text-transparent leading-tight mb-6 max-w-[880px] lg:max-w-none mx-auto">
+          Cut Your AI Bill 75%—<span className="text-primary">Automatically.</span>
         </h1>
         
-        <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed mb-6 px-4 sm:px-0">
-          Sleipner automatically routes your LLM requests to the most cost-effective models while maintaining quality. 
-          <span className="text-foreground font-medium"> One URL change, instant savings.</span>
-        </p>
-        
-        <div className="mb-8 sm:mb-12 p-4 sm:p-6 bg-background/50 backdrop-blur-sm border border-primary/20 rounded-lg max-w-2xl mx-auto">
-          <p className="text-base sm:text-lg text-primary font-semibold mb-2">Performance Guarantee</p>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            Pay only 25% of the savings we deliver. If we don't reduce your costs, you pay nothing.
+        {/* Enhanced sub-headline with improved scan-ability */}
+        <div className="mb-10">
+          <p className="text-lg sm:text-xl md:text-2xl text-slate-300 max-w-2xl mx-auto leading-relaxed px-4 sm:px-0">
+            Change one URL and Sleipner <em>routes, caches & compresses</em> every LLM request.
+            <span className="block text-slate-200 font-bold mt-2">
+              No quality loss. Zero engineering lift.
+            </span>
           </p>
         </div>
         
-        <div className="flex flex-col sm:flex-row justify-center gap-4 max-w-md mx-auto">
-          <Button asChild size="lg" className="text-lg px-8 py-6 h-auto shadow-lg">
-            <a href="https://forms.gle/2r1R3BbCbC4fNnrr9" target="_blank" rel="noopener noreferrer">
-              Request Beta Access
-            </a>
-          </Button>
-          <Button asChild size="lg" variant="outline" className="text-lg px-8 py-6 h-auto">
-            <Link href="#how-it-works">Learn How It Works</Link>
+        {/* CTA buttons with improved spacing and gradient hover effect */}
+        <div className="flex flex-col sm:flex-row justify-center gap-3 lg:gap-6 max-w-lg mx-auto mb-8 mt-10">
+          <CTAButton 
+            size="lg" 
+            aurora="intense"
+            onClick={() => setIsModalOpen(true)}
+            className="hover:scale-105 hover:shadow-lg hover:shadow-primary/40 hover:bg-gradient-to-r hover:from-indigo-500 hover:via-sky-500 hover:to-emerald-500 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black transition-all duration-300"
+          >
+            Request Beta Access
+          </CTAButton>
+          <Button 
+            asChild 
+            size="lg" 
+            variant="outline" 
+            className="text-lg px-8 py-6 h-auto bg-transparent border border-white/20 hover:bg-white/5 transition-all duration-200"
+          >
+            <Link href="/docs" className="flex items-center gap-2">
+              → View API Docs
+            </Link>
           </Button>
         </div>
+
+        {/* Social proof text with improved hierarchy */}
+        <div className="mb-8 sm:mb-12">
+          <p className="text-sm text-slate-400 italic max-w-2xl mx-auto">
+            Trusted by teams at scaleups, biotech labs & top Gen-AI startups.
+          </p>
+        </div>
         
+        {/* Updated footer microcopy with dev-focused emphasis */}
         <div className="mt-6 sm:mt-8 text-xs sm:text-sm text-muted-foreground flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-1">
           <span className="text-primary font-medium">No credit card required</span>
           <span className="hidden sm:inline"> • </span>
           <span className="text-primary font-medium">2-minute setup</span>
           <span className="hidden sm:inline"> • </span>
           <span className="text-primary font-medium">Risk-free trial</span>
+          <span className="hidden sm:inline"> • </span>
+          <span className="text-primary font-bold">🚀 OpenAI-compatible</span>
         </div>
       </div>
+      
+      <BetaAccessModal 
+        open={isModalOpen} 
+        onOpenChange={setIsModalOpen} 
+      />
     </section>
   )
 } 

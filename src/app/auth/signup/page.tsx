@@ -1,11 +1,15 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { BetaAccessModal } from '@/components/BetaAccessModal'
 
 export default function SignUp() {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -41,14 +45,12 @@ export default function SignUp() {
                 <p className="text-sm text-muted-foreground mb-4">
                   Join our private beta and help shape the future of AI cost optimization.
                 </p>
-                <Button variant="outline" className="w-full" asChild>
-                  <a 
-                    href="https://forms.gle/2r1R3BbCbC4fNnrr9"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Request Beta Access
-                  </a>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => setIsModalOpen(true)}
+                >
+                  Request Beta Access
                 </Button>
               </div>
             </div>
@@ -61,6 +63,11 @@ export default function SignUp() {
           </div>
         </CardContent>
       </Card>
+      
+      <BetaAccessModal 
+        open={isModalOpen} 
+        onOpenChange={setIsModalOpen} 
+      />
     </div>
   )
 } 

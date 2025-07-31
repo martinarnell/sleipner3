@@ -7,30 +7,34 @@ import {
 
 const faqs = [
   {
-    question: 'What if Sleipner doesn&apos;t save us money?',
-    answer: 'You pay nothing. Our pricing is 100% performance-based—if we don\'t deliver savings, we don\'t get paid.',
+    question: 'What if Sleipner doesn\'t save us money?',
+    answer: 'You pay nothing beyond the flat platform fee; no hidden charges.',
   },
   {
-    question: 'Is this a drop-in replacement for the OpenAI API?',
-    answer: 'Yes. You only need to change the base URL to our proxy endpoint and add your API key. Your existing code will work without any other changes.',
+    question: 'Is it a drop-in replacement for the OpenAI API?',
+    answer: 'Yes—just change the base URL. No code refactor required.',
   },
   {
-    question: 'What models do you support?',
-    answer: 'We support a wide range of models from providers like OpenAI, Anthropic, Google, and open-source alternatives. Our routing system automatically selects the best model for each query based on cost and quality.',
+    question: 'How does Sleipner handle my provider key?',
+    answer: 'Forwarded once per request over TLS. Ephemeral by default (not persisted). Optionally stored encrypted if you enable key vault.',
   },
   {
-    question: 'Can I set a maximum cost or model tier?',
-    answer: 'Absolutely. You have full control to set spending limits and define the maximum model tier (e.g., never escalate beyond GPT-4o) to prevent unexpected costs.',
+    question: 'Which models do you support?',
+    answer: 'GPT-3.5 / 4o, Claude 3 series, Gemini 1.5, Llama 3, Mixtral, and more.',
+  },
+  {
+    question: 'Can I set a maximum cost or tier?',
+    answer: 'Absolutely—define hard caps or force premium for specific routes.',
   },
   {
     question: 'How do you ensure quality?',
-    answer: 'We use a proprietary grading system with independent "judge" models to score every response for accuracy and helpfulness. You can also enable optional self-correction mechanisms for tasks like code generation.',
+    answer: 'Every response is graded by independent judge models; anything < 90/100 is auto-retried with a stronger model.',
   },
 ]
 
 export const FAQ = () => {
   return (
-    <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-background/50 to-background">
+    <section className="py-16 sm:py-20 lg:py-24 bg-black">
       <div className="container mx-auto px-6">
         <div className="text-center mb-12 sm:mb-16 lg:mb-20">
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">Frequently Asked Questions</h2>

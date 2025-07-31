@@ -113,6 +113,21 @@ export const AlertTriangle = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
+export const Shield = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        {...props}
+    >
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+);
+
 // Placeholder logos for "Trusted By" section
 export const CompanyLogo1 = (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 100 30" fill="currentColor" {...props}><path d="M10 30V0h10v30H10zm20 0V0h10v30H30zm20 0V0h10v30H50zm20 0V0h10v30H70z"></path></svg>

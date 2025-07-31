@@ -1,99 +1,88 @@
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check } from './icons';
-import { Aurora } from '@/components/Aurora';
+'use client'
 
-const tiers = [
-  {
-    name: 'Free',
-    price: '$0',
-    description: 'Get started and experience the power of AI cost savings.',
-    features: [
-      'Up to 1,000 requests/month',
-      'Basic model routing',
-      'Community support',
-    ],
-    cta: 'Start for Free',
-  },
-  {
-    name: 'Enterprise',
-    price: '25% of savings',
-    description: 'Cost: 25% of realised savings, billed monthly.',
-    features: [
-      'Unlimited requests',
-      'Advanced routing & fine-tuning',
-      'Dedicated support & SLA',
-      'If savings = €0, your Sleipner fee = €0',
-    ],
-    cta: 'Contact Sales',
-  },
-];
+import { useState } from 'react'
+import { CTAButton } from '@/components/ui/cta-button'
+import { BetaAccessModal } from '@/components/BetaAccessModal'
 
 export const Pricing = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
   return (
-    <section className="relative py-24 bg-background/50 overflow-hidden">
-      <Aurora variant="subtle" overlay overlayOpacity={3} />
-      <div className="relative container mx-auto px-6 z-10">
-        <div className="text-center mb-20">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">Pricing that scales as your AI bill shrinks.</h2>
-          <p className="text-muted-foreground text-xl max-w-3xl mx-auto leading-relaxed">
-            Simple, transparent pricing that scales with you.
+    <section id="pricing" className="relative py-24 bg-black overflow-hidden">
+      <div className="relative container mx-auto px-6 text-center">
+        <div className="mb-16">
+          <h2 className="text-4xl md:text-5xl font-bold mb-4">
+            Pricing that scales <span className="whitespace-nowrap">with your savings.</span>
+          </h2>
+          <p className="text-slate-400 text-xl max-w-2xl mx-auto leading-relaxed">
+            One simple plan while we&apos;re in private beta.
           </p>
         </div>
-        <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-          {tiers.map((tier) => (
-            <Card 
-              key={tier.name} 
-              className={`flex flex-col relative ${
-                tier.name === 'Enterprise' 
-                  ? 'border-primary/30 shadow-lg shadow-primary/10 scale-105' 
-                  : 'border-border/50'
-              }`}
+
+        {/* Single Enterprise Plan Card */}
+        <div className="mx-auto max-w-xl">
+          <div className="relative rounded-2xl bg-slate-900/60 ring-1 ring-slate-700/50 p-10 backdrop-blur-sm">
+            {/* Private Beta Badge */}
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-800 px-4 py-1 text-xs tracking-wide text-slate-300 uppercase font-medium">
+              Private Beta
+            </span>
+
+            {/* Plan Title */}
+            <h3 className="text-lg font-semibold text-slate-200 mb-6">
+              Enterprise — Performance-Based
+            </h3>
+
+            {/* Pricing Hero */}
+            <div className="mb-8">
+              <p className="text-5xl md:text-6xl font-extrabold mb-2 bg-gradient-to-b from-foreground to-foreground/80 bg-clip-text text-transparent">
+                25<span className="text-3xl md:text-4xl align-top">%</span>
+              </p>
+              <p className="text-slate-400 text-lg">of realised savings, billed monthly</p>
+            </div>
+
+            {/* Features List */}
+            <ul className="space-y-3 text-left text-base mb-10 max-w-md mx-auto">
+              <li className="flex items-start gap-3">
+                <span className="text-primary">✓</span>
+                <span className="text-slate-300">Unlimited requests</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-primary">✓</span>
+                <span className="text-slate-300">Advanced routing, cache & compression</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-primary">✓</span>
+                <span className="text-slate-300">Dedicated success engineer & SLA</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="text-primary">✓</span>
+                <span className="text-slate-300">€0 fee if savings = €0</span>
+              </li>
+            </ul>
+
+            {/* CTA Button */}
+            <CTAButton 
+              size="lg"
+              aurora="intense"
+              onClick={() => setIsModalOpen(true)}
+              fullWidth
+              className="mb-4"
             >
-              {tier.name === 'Enterprise' && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-primary text-primary-foreground px-4 py-2 rounded-full text-sm font-semibold">
-                    Most Popular
-                  </span>
-                </div>
-              )}
-              <CardHeader className="text-center pb-8">
-                <CardTitle className="text-2xl">{tier.name}</CardTitle>
-                <CardDescription className="text-base mt-2">{tier.description}</CardDescription>
-                <div className="mt-6">
-                  <span className="text-4xl md:text-5xl font-bold">{tier.price}</span>
-                  {tier.name === 'Free' && <span className="text-muted-foreground text-lg">/month</span>}
-                </div>
-              </CardHeader>
-              <CardContent className="flex-grow px-8">
-                <ul className="space-y-4">
-                  {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3">
-                      <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                      <span className="text-muted-foreground leading-relaxed">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-              <CardFooter className="pt-8 px-8">
-                <Button 
-                  asChild
-                  className={`w-full py-6 text-lg ${
-                    tier.name === 'Enterprise' 
-                      ? 'bg-primary hover:bg-primary/90' 
-                      : ''
-                  }`}
-                  variant={tier.name === 'Enterprise' ? 'default' : 'outline'}
-                >
-                  <a href="https://forms.gle/2r1R3BbCbC4fNnrr9" target="_blank" rel="noopener noreferrer">
-                    {tier.cta}
-                  </a>
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
+              Request Beta Access
+            </CTAButton>
+
+            {/* Risk-free messaging */}
+            <p className="text-xs text-slate-500">
+              14-day proof-of-value · No credit card · Cancel anytime
+            </p>
+          </div>
         </div>
       </div>
+      
+      <BetaAccessModal 
+        open={isModalOpen} 
+        onOpenChange={setIsModalOpen} 
+      />
     </section>
   )
 } 

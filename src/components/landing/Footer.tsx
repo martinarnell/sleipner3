@@ -1,12 +1,10 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Aurora } from '@/components/Aurora'
 
 export const Footer = () => {
   return (
-    <footer className="relative bg-background border-t overflow-hidden">
-      <Aurora variant="dark" overlay overlayOpacity={15} />
-      <div className="relative container mx-auto px-4 py-8 z-10">
+    <footer className="relative bg-black border-t overflow-hidden">
+      <div className="relative container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center gap-2 mb-4 md:mb-0">
             <Image 

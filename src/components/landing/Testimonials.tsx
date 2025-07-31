@@ -1,50 +1,54 @@
+'use client'
+
+import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { CheckCircle } from './icons'
+
+import { CTAButton } from '@/components/ui/cta-button'
+import { BetaAccessModal } from '@/components/BetaAccessModal'
 
 const betaResults = [
   {
     metric: "68%",
-    label: "Average cost reduction",
+    label: "average cost reduction",
     description: "Across 47 teams in private beta"
   },
   {
     metric: "< 1 week",
-    label: "Time to see savings",
+    label: "to see savings",
     description: "Most teams see results immediately"
   },
   {
-    metric: "Zero",
-    label: "Quality complaints",
+    metric: "0",
+    label: "quality complaints",
     description: "Our grading system maintains standards"
   }
 ]
 
 const testimonials = [
   {
-    quote: "We cut our OpenAI bill from $12K to $3.2K per month with zero impact on our product quality. The integration took 5 minutes.",
-    author: "Sarah Chen",
+    quote: "We cut our OpenAI bill from $12k to $3.2k a month—and the integration took 5 minutes.",
+    author: "Sara Envall",
     role: "CTO",
-    company: "TechFlow AI"
+    company: "Sendra AI"
   },
   {
-    quote: "Sleipner's intelligent routing saved us $180K annually. We wish we had found this solution six months ago.",
-    author: "Marcus Rodriguez", 
+    quote: "Sleipner's routing saves us $18k a year. Wish we'd had it six months sooner.",
+    author: "Marcus Enberg", 
     role: "Head of Engineering",
-    company: "DataPrime"
+    company: "Gasell"
   }
 ]
 
 export const Testimonials = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
   return (
-    <section className="py-16 sm:py-20 lg:py-24 bg-background/50">
+    <section className="py-16 sm:py-20 lg:py-24 bg-black">
       <div className="container mx-auto px-6">
         <div className="text-center mb-12 sm:mb-16">
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">
-            Proven Results from Beta Teams
+            Proven Results from Private-Beta Teams
           </h2>
-          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed px-4 sm:px-0">
-            Real savings from real teams already using Sleipner in production.
-          </p>
         </div>
         
         {/* Beta Results Metrics */}
@@ -66,7 +70,7 @@ export const Testimonials = () => {
             <Card key={i} className="bg-background/80 backdrop-blur-sm border-primary/20 p-4 sm:p-6">
               <CardContent className="p-0">
                 <blockquote className="text-base sm:text-lg leading-relaxed mb-4 sm:mb-6">
-                  "{testimonial.quote}"
+                  &quot;{testimonial.quote}&quot;
                 </blockquote>
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
@@ -89,14 +93,15 @@ export const Testimonials = () => {
         {/* Beta Access CTA */}
         <div className="text-center">
           <div className="max-w-md mx-auto">
-            <a 
-              href="https://forms.gle/2r1R3BbCbC4fNnrr9"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center w-full text-lg px-8 py-6 h-auto bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-200 rounded-md text-primary-foreground font-medium"
+            <CTAButton 
+              variant="gradient" 
+              size="lg" 
+              aurora="intense"
+              onClick={() => setIsModalOpen(true)}
+              fullWidth
             >
               Join Private Beta
-            </a>
+            </CTAButton>
             <p className="text-sm text-muted-foreground mt-4">
               <span className="text-primary font-medium">47 teams</span> already saving money • 
               <span className="text-primary font-medium"> 2-minute setup</span> • 
@@ -105,6 +110,11 @@ export const Testimonials = () => {
           </div>
         </div>
       </div>
+      
+      <BetaAccessModal 
+        open={isModalOpen} 
+        onOpenChange={setIsModalOpen} 
+      />
     </section>
   )
 } 

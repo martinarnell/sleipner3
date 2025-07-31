@@ -40,6 +40,44 @@ export type Database = {
           is_active?: boolean
         }
       }
+      beta_leads: {
+        Row: {
+          id: string
+          email: string
+          company: string | null
+          ip: string | null
+          user_agent: string | null
+          source: string | null
+          ai_service: string | null
+          monthly_spend: string | null
+          created_at: string
+          confirmed_at: string | null
+        }
+        Insert: {
+          id?: string
+          email: string
+          company?: string | null
+          ip?: string | null
+          user_agent?: string | null
+          source?: string | null
+          ai_service?: string | null
+          monthly_spend?: string | null
+          created_at?: string
+          confirmed_at?: string | null
+        }
+        Update: {
+          id?: string
+          email?: string
+          company?: string | null
+          ip?: string | null
+          user_agent?: string | null
+          source?: string | null
+          ai_service?: string | null
+          monthly_spend?: string | null
+          created_at?: string
+          confirmed_at?: string | null
+        }
+      }
     }
   }
 } 
