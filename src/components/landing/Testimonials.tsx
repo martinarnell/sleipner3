@@ -26,13 +26,13 @@ const betaResults = [
 
 const testimonials = [
   {
-    quote: "We cut our OpenAI bill from $12k to $3.2k a month—and the integration took 5 minutes.",
+    quote: "We cut our OpenAI bill from $12k to $3.2k a month—the semantic caching alone saves us thousands. Integration took 5 minutes.",
     author: "Sara Envall",
     role: "CTO",
     company: "Sendra AI"
   },
   {
-    quote: "Sleipner's routing saves us $18k a year. Wish we'd had it six months sooner.",
+    quote: "Sleipner's caching and compression combo saves us $18k a year. The prompt compression is brilliant—same quality, 40% fewer tokens.",
     author: "Marcus Enberg", 
     role: "Head of Engineering",
     company: "Gasell Gen"

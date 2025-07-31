@@ -64,8 +64,8 @@ export const Problem = () => {
         <div className="text-center mt-12">
           <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto">
             The answer isn&apos;t <em>&quot;use cheap models everywhere&quot;</em>—it&apos;s{' '}
-            <span className="font-semibold text-white">use the right model for each request.</span>{' '}
-            Sleipner handles that for you.
+            <span className="font-semibold text-white">cache semantically, compress smartly, and route intelligently.</span>{' '}
+            Sleipner handles all three for you.
           </p>
         </div>
       </div>

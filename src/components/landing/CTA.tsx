@@ -14,7 +14,7 @@ export const CTA = () => {
             Start Saving on AI Costs Today
           </h2>
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground mb-8 sm:mb-10 max-w-3xl mx-auto leading-relaxed px-4 sm:px-0">
-            Join 47 teams already saving 68% on average. Risk-free trial with performance-based pricing.
+            Join 47 teams already saving 68% on average with semantic caching, compression & intelligent routing. Risk-free trial with performance-based pricing.
           </p>
           
           <div className="flex flex-col gap-4 justify-center items-center mb-8">

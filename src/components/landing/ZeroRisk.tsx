@@ -12,7 +12,7 @@ export const ZeroRisk = () => {
               Keep 75% of every dollar we save you. No savings? No fee.
             </p>
             <p className="text-sm text-slate-400">
-              We only succeed when you succeed. Our performance-based model aligns our incentives with your cost reduction goals.
+              We only succeed when you succeed. Our semantic caching, compression, and routing work together to maximize your savings with our performance-based model.
             </p>
           </div>
         </div>

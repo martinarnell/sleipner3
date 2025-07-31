@@ -15,20 +15,28 @@ const faqs = [
     answer: 'Yes—just change the base URL. No code refactor required.',
   },
   {
+    question: 'How does semantic prompt caching work?',
+    answer: 'Our caching recognizes similar prompts semantically, even if worded differently. It uses vector similarity to find cached responses that match your request\'s meaning, not just exact text.',
+  },
+  {
+    question: 'Does prompt compression affect quality?',
+    answer: 'No—our compression preserves meaning and context while reducing token count by up to 40%. All compressed prompts are tested to ensure output quality remains consistent.',
+  },
+  {
+    question: 'Which models do you support?',
+    answer: 'GPT-3.5 / 4o, Claude 3 series, Gemini 1.5, Llama 3, Mixtral, and more—all with caching and compression.',
+  },
+  {
+    question: 'How do you ensure quality?',
+    answer: 'Every response is graded by independent judge models; anything < 90/100 is auto-retried with a stronger model. Caching and compression are quality-tested before deployment.',
+  },
+  {
     question: 'How does Sleipner handle my provider key?',
     answer: 'Forwarded once per request over TLS. Ephemeral by default (not persisted). Optionally stored encrypted if you enable key vault.',
   },
   {
-    question: 'Which models do you support?',
-    answer: 'GPT-3.5 / 4o, Claude 3 series, Gemini 1.5, Llama 3, Mixtral, and more.',
-  },
-  {
     question: 'Can I set a maximum cost or tier?',
-    answer: 'Absolutely—define hard caps or force premium for specific routes.',
-  },
-  {
-    question: 'How do you ensure quality?',
-    answer: 'Every response is graded by independent judge models; anything < 90/100 is auto-retried with a stronger model.',
+    answer: 'Absolutely—define hard caps or force premium for specific routes. Caching and compression work within your cost constraints.',
   },
 ]
 

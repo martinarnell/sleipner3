@@ -3,18 +3,24 @@
 const steps = [
   {
     step: 1,
-    title: 'Smart Request Scoring',
-    description: 'Real-time analysis of token count, complexity & accuracy need.',
-    technical: 'Multi-dimensional scoring algorithm considers semantic complexity and task type'
+    title: 'Smart Request Analysis',
+    description: 'Real-time analysis of token count, complexity & semantic caching opportunities.',
+    technical: 'Multi-dimensional scoring algorithm + prompt compression detection'
   },
   {
     step: 2,
-    title: 'Intelligent Model Routing',
-    description: 'Dynamically selects from 15+ models—GPT-3.5 to GPT-4o to Claude Sonnet—choosing the cheapest that meets your score.',
-    technical: 'Dynamic load balancing across providers with real-time performance monitoring'
+    title: 'Cache & Compress',
+    description: 'Semantic prompt caching checks for similar requests; compression reduces token count while preserving meaning.',
+    technical: 'Vector similarity matching + context-aware compression algorithms'
   },
   {
     step: 3,
+    title: 'Intelligent Model Routing',
+    description: 'Dynamically selects from 15+ models—GPT-3.5 to GPT-4o to Claude Sonnet—choosing the cheapest that meets your requirements.',
+    technical: 'Dynamic load balancing across providers with real-time performance monitoring'
+  },
+  {
+    step: 4,
     title: 'Quality Check & Fallback',
     description: 'Independent judge models grade each answer; if it\'s < 90, Sleipner escalates automatically.',
     technical: '+ 43ms median latency'
