@@ -2,13 +2,12 @@ import { Features } from "@/components/landing/Features";
 import { Footer } from "@/components/landing/Footer";
 import { Header } from "@/components/landing/Header";
 import { Hero } from "@/components/landing/Hero";
+import { Problem } from "@/components/landing/Problem";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { Testimonials } from "@/components/landing/Testimonials";
 import { Pricing } from "@/components/landing/Pricing";
 import { FAQ } from "@/components/landing/FAQ";
 import { CTA } from "@/components/landing/CTA";
-
-import { AnimateOnScroll } from "@/components/landing/AnimateOnScroll";
 
 export default function Home() {
   const structuredData = {
@@ -44,25 +43,15 @@ export default function Home() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
       <Header />
-      <main>
+      <main className="overflow-x-hidden">
         <Hero />
-
-        <AnimateOnScroll>
-          <Features />
-        </AnimateOnScroll>
+        <Problem />
         <HowItWorks />
-        <AnimateOnScroll>
-          <Testimonials />
-        </AnimateOnScroll>
-        <AnimateOnScroll>
-          <Pricing />
-        </AnimateOnScroll>
-        <AnimateOnScroll>
-          <FAQ />
-        </AnimateOnScroll>
-        <AnimateOnScroll>
-          <CTA />
-        </AnimateOnScroll>
+        <Features />
+        <Pricing />
+        <Testimonials />
+        <FAQ />
+        <CTA />
       </main>
       <Footer />
     </>

@@ -30,11 +30,11 @@ const faqs = [
 
 export const FAQ = () => {
   return (
-    <section className="py-24 bg-gradient-to-b from-background/50 to-background">
+    <section className="py-16 sm:py-20 lg:py-24 bg-gradient-to-b from-background/50 to-background">
       <div className="container mx-auto px-6">
-        <div className="text-center mb-20">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4">Frequently Asked Questions</h2>
-          <p className="text-muted-foreground text-xl max-w-2xl mx-auto leading-relaxed">
+        <div className="text-center mb-12 sm:mb-16 lg:mb-20">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">Frequently Asked Questions</h2>
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed px-4 sm:px-0">
             Have questions? We&apos;ve got answers.
           </p>
         </div>
@@ -44,12 +44,12 @@ export const FAQ = () => {
               <AccordionItem 
                 key={i} 
                 value={`item-${i}`} 
-                className="bg-background/80 backdrop-blur-sm border border-primary/10 rounded-lg px-6 py-2"
+                className="bg-background/80 backdrop-blur-sm border border-primary/10 rounded-lg px-4 sm:px-6 py-2"
               >
-                <AccordionTrigger className="text-left text-lg font-medium hover:no-underline">
+                <AccordionTrigger className="text-left text-base sm:text-lg font-medium hover:no-underline">
                   {faq.question}
                 </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground leading-relaxed pt-2 pb-4">
+                <AccordionContent className="text-sm sm:text-base text-muted-foreground leading-relaxed pt-2 pb-4">
                   {faq.answer}
                 </AccordionContent>
               </AccordionItem>
