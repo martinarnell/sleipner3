@@ -55,8 +55,8 @@ export const Hero = () => {
             variant="outline" 
             className="text-lg px-8 py-6 h-auto bg-transparent border border-white/20 hover:bg-white/5 transition-all duration-200"
           >
-            <Link href="/docs" className="flex items-center gap-2">
-              → View API Docs
+            <Link href="/#how-it-works" className="flex items-center gap-2">
+              → How it works
             </Link>
           </Button>
         </div>
