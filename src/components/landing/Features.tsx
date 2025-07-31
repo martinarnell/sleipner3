@@ -1,46 +1,34 @@
-import { Zap, ShieldCheck, Code2, Key, Coins, Database, Shrink } from 'lucide-react';
+import { Zap, ShieldCheck, Code2, Coins, Database } from 'lucide-react';
 
 const features = [
   {
     icon: Zap,
     title: 'Intelligent Routing',
-    desc: 'Right-sizes every prompt to the cheapest capable model with semantic analysis.',
+    desc: 'Up to 75% cost cut by matching every prompt to the cheapest capable model—powered by semantic analysis & prompt compression.',
     metric: 'Up to 75% savings',
-  },
-  {
-    icon: Database,
-    title: 'Semantic Prompt Caching',
-    desc: 'Smart caching recognizes similar prompts semantically, even with different wording.',
-    metric: 'Up to 100% faster',
-  },
-  {
-    icon: Shrink,
-    title: 'Prompt Compression',
-    desc: 'Advanced compression reduces token count while preserving meaning and context.',
-    metric: 'Up to 60% shorter',
   },
   {
     icon: ShieldCheck,
     title: 'Quality Guardrails',
-    desc: 'Judge models auto-retry below 90/100 score.',
+    desc: '99.9% quality retention. Judge models score each answer and auto-retry if it\'s below 90/100.',
     metric: '99.9% quality kept',
+  },
+  {
+    icon: Database,
+    title: 'Semantic Prompt Caching',
+    desc: 'Reuses answers to similar questions—even when wording changes—for instant replies and extra savings.',
+    metric: 'Up to 100% faster',
   },
   {
     icon: Code2,
     title: '2-Minute Integration',
-    desc: 'Swap the base URL—no prompt changes, no SDK lock-in.',
+    desc: 'Swap one base URL; keep your SDK & prompts. (< 10 LOC change.)',
     metric: '< 10 LOC',
   },
   {
-    icon: Key,
-    title: 'Bring Your Own Keys',
-    desc: 'Forward your OpenAI / Anthropic keys; we never store them.',
-    metric: 'Full data control',
-  },
-  {
     icon: Coins,
-    title: 'Pay-as-You-Save',
-    desc: '25% of realised savings; €0 if we save you €0.',
+    title: 'Pay-as-You-Save Pricing',
+    desc: '25% of realised savings; €0 fee if we save you €0.',
     metric: 'Zero risk',
   },
 ];
