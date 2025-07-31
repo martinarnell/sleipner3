@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyApiKey, verifyApiKeyById } from '@/lib/api-keys'
+import { getSpecificModelPricing, calculateCost, getFallbackPricing, getGraderModelPricing } from '@/lib/pricing'
+import { logApiRequestAsync } from '@/lib/api-logging'
+import { calculateCostComparison, type CostComparison, type Message as CostComparisonMessage } from '@/lib/cost-comparison'
 
 // ========== SLEIPNER CASCADE SYSTEM ==========
 
@@ -283,8 +286,10 @@ async function callTier0(messages: Message[]) {
     const promptTokens = usage.prompt_tokens || 0
     const completionTokens = usage.completion_tokens || 0
     
-    // Groq pricing: $0.59/1M input tokens, $0.79/1M output tokens
-    const cost = (promptTokens * 0.00059 + completionTokens * 0.00079) / 1000
+    // Get Groq Llama-3 70B pricing from database
+    const groqPricing = await getSpecificModelPricing('groq', 'llama-3', '70b-8192') || 
+                        getFallbackPricing('llama-3-70b')
+    const cost = calculateCost(groqPricing, promptTokens, completionTokens)
 
     return {
       content,
@@ -301,10 +306,10 @@ async function callTier0(messages: Message[]) {
       cost_breakdown: {
         input_tokens: promptTokens,
         output_tokens: completionTokens,
-        input_cost_per_1m: 0.59,
-        output_cost_per_1m: 0.79,
-        input_cost: (promptTokens * 0.00059) / 1000,
-        output_cost: (completionTokens * 0.00079) / 1000,
+        input_cost_per_1m: groqPricing.inputCostPerMillionTokens,
+        output_cost_per_1m: groqPricing.outputCostPerMillionTokens,
+        input_cost: (promptTokens / 1_000_000) * groqPricing.inputCostPerMillionTokens,
+        output_cost: (completionTokens / 1_000_000) * groqPricing.outputCostPerMillionTokens,
         total_cost: cost
       }
     }
@@ -320,23 +325,34 @@ async function gradeResponse(query: string, response: string, systemContext?: st
   
   try {
     // First classify the question
-    const questionType = await classifyQuestion(query, systemContext)
+    const classificationResult = await classifyQuestion(query, systemContext)
     
     // Then evaluate all dimensions
-    const result = await evaluateMultiDimensional(query, response, questionType, systemContext)
+    const result = await evaluateMultiDimensional(query, response, classificationResult.type, systemContext)
+    
+    const endTime = Date.now()
+    const totalCost = classificationResult.cost + result.cost
     
     return {
       score: result.weightedComposite,
       passed: result.passed,
       reasoning: `Multi-dimensional: ${result.dimensionScores.map(d => `${d.dimension}:${d.score}`).join(', ')}`,
-      cost: result.cost,
+      cost: totalCost,
       timing: {
-        duration_ms: result.timing,
-        api_call_ms: result.timing,
+        duration_ms: endTime - startTime,
+        api_call_ms: classificationResult.timing + result.timing,
+        classification_ms: classificationResult.timing,
+        evaluation_ms: result.timing,
         start_time: startTime,
-        end_time: startTime + result.timing
+        end_time: endTime
       },
-      cost_breakdown: result.cost_breakdown,
+      cost_breakdown: {
+        ...result.cost_breakdown,
+        classification: {
+          cost: classificationResult.cost,
+          timing_ms: classificationResult.timing
+        }
+      },
       threshold: result.threshold,
       questionType: result.questionType,
       dimensionScores: result.dimensionScores,
@@ -346,7 +362,8 @@ async function gradeResponse(query: string, response: string, systemContext?: st
     }
   } catch (error) {
     console.error('Multi-dimensional grading error:', error)
-    const fallbackTiming = Date.now() - startTime
+    const errorEndTime = Date.now()
+    const fallbackTiming = errorEndTime - startTime
     return {
       score: 50,
       passed: false,
@@ -355,8 +372,10 @@ async function gradeResponse(query: string, response: string, systemContext?: st
       timing: {
         duration_ms: fallbackTiming,
         api_call_ms: fallbackTiming,
+        classification_ms: 0,
+        evaluation_ms: 0,
         start_time: startTime,
-        end_time: Date.now()
+        end_time: errorEndTime
       },
       cost_breakdown: {},
       threshold: 75,
@@ -536,7 +555,12 @@ const QUESTION_TYPE_WEIGHTS = {
 };
 
 // Question Classification Function
-async function classifyQuestion(query: string, systemContext?: string): Promise<'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL'> {
+async function classifyQuestion(query: string, systemContext?: string): Promise<{
+  type: 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL';
+  timing: number;
+  cost: number;
+}> {
+  const startTime = Date.now()
   const anthropicApiKey = process.env.ANTHROPIC_KEY
   if (!anthropicApiKey) {
     throw new Error('ANTHROPIC_KEY environment variable not set')
@@ -592,22 +616,34 @@ Respond with ONLY the category name: FACTUAL, ANALYTICAL, CREATIVE, TECHNICAL, o
       })
     })
 
+    const timing = Date.now() - startTime
+    
     if (!response.ok) {
       console.error('Anthropic API error:', response.status, response.statusText)
-      return 'ANALYTICAL' // Default fallback
+      return { type: 'ANALYTICAL', timing, cost: 0 } // Default fallback
     }
 
     const data = await response.json()
     const classification = data.content?.[0]?.text?.trim()?.toUpperCase()
     
+    // Calculate cost (Claude Haiku pricing: $0.25/1M input, $1.25/1M output)
+    const inputTokens = data.usage?.input_tokens || 0
+    const outputTokens = data.usage?.output_tokens || 0
+    const cost = (inputTokens * 0.25 / 1000000) + (outputTokens * 1.25 / 1000000)
+    
     if (['FACTUAL', 'ANALYTICAL', 'CREATIVE', 'TECHNICAL', 'ETHICAL'].includes(classification)) {
-      return classification as 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL'
+      return { 
+        type: classification as 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL',
+        timing,
+        cost
+      }
     }
     
-    return 'ANALYTICAL' // Default fallback
+    return { type: 'ANALYTICAL', timing, cost } // Default fallback
   } catch (error) {
     console.error('Question classification error:', error)
-    return 'ANALYTICAL' // Default fallback
+    const timing = Date.now() - startTime
+    return { type: 'ANALYTICAL', timing, cost: 0 } // Default fallback
   }
 }
 
@@ -676,12 +712,19 @@ Provide your evaluation as JSON:
       // Calculate cost for this dimension
       const inputTokens = data.usage?.input_tokens || 0
       const outputTokens = data.usage?.output_tokens || 0
-      const dimCost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000 // Claude Haiku pricing
+      // Get grader pricing from database (Claude Haiku or alternatives)
+      const graderPricing = await getGraderModelPricing('claude-3-haiku-20240307')
+      const dimCost = calculateCost(graderPricing, inputTokens, outputTokens)
       totalCost += dimCost
       costBreakdown[dimName] = {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
-        cost: dimCost
+        input_cost_per_1m: graderPricing.inputCostPerMillionTokens,
+        output_cost_per_1m: graderPricing.outputCostPerMillionTokens,
+        input_cost: (inputTokens / 1_000_000) * graderPricing.inputCostPerMillionTokens,
+        output_cost: (outputTokens / 1_000_000) * graderPricing.outputCostPerMillionTokens,
+        cost: dimCost,
+        grader_model: `${graderPricing.provider}/${graderPricing.modelName}${graderPricing.modelVariant ? `-${graderPricing.modelVariant}` : ''}`
       }
 
       try {
@@ -822,8 +865,8 @@ async function callTier1(messages: Message[], requestedModel: string, compressio
     const completionTokens = usage.completion_tokens || 0
     
     // OpenAI pricing: $10/1M input tokens, $30/1M output tokens for GPT-4
-    const inputCostPer1M = getInputCostPer1M(openaiModel)
-    const outputCostPer1M = getOutputCostPer1M(openaiModel)
+    const inputCostPer1M = await getInputCostPer1M(openaiModel)
+    const outputCostPer1M = await getOutputCostPer1M(openaiModel)
     const inputCost = (promptTokens * inputCostPer1M) / 1000000
     const outputCost = (completionTokens * outputCostPer1M) / 1000000
     const totalCost = inputCost + outputCost
@@ -878,29 +921,51 @@ function mapToOpenAIModel(requestedModel: string): string {
 }
 
 // Helper function to get input cost per 1M tokens for different models
-function getInputCostPer1M(model: string): number {
-  const costs: { [key: string]: number } = {
-    'gpt-4-0125-preview': 10.00,
-    'gpt-4o': 2.50,
-    'gpt-4o-mini': 0.15,
-    'o1-preview': 15.00,
-    'o1-mini': 3.00
+async function getInputCostPer1M(model: string): Promise<number> {
+  // Map model names to our database format
+  const modelMapping: { [key: string]: { provider: string, modelName: string, variant?: string | null } } = {
+    'gpt-4-0125-preview': { provider: 'openai', modelName: 'gpt-4', variant: 'turbo' },
+    'gpt-4o': { provider: 'openai', modelName: 'gpt-4o', variant: null },
+    'gpt-4o-mini': { provider: 'openai', modelName: 'gpt-4o', variant: 'mini' },
+    'o1-preview': { provider: 'openai', modelName: 'o1', variant: 'preview' },
+    'o1-mini': { provider: 'openai', modelName: 'o1', variant: 'mini' }
   }
   
-  return costs[model] || 2.50 // Default to gpt-4o pricing
+  const mapping = modelMapping[model]
+  if (mapping) {
+    const pricing = await getSpecificModelPricing(mapping.provider, mapping.modelName, mapping.variant)
+    if (pricing) {
+      return pricing.inputCostPerMillionTokens
+    }
+  }
+  
+  // Fallback to database pricing or default
+  const fallback = getFallbackPricing(model)
+  return fallback.inputCostPerMillionTokens
 }
 
 // Helper function to get output cost per 1M tokens for different models  
-function getOutputCostPer1M(model: string): number {
-  const costs: { [key: string]: number } = {
-    'gpt-4-0125-preview': 30.00,
-    'gpt-4o': 10.00,
-    'gpt-4o-mini': 0.60,
-    'o1-preview': 60.00,
-    'o1-mini': 12.00
+async function getOutputCostPer1M(model: string): Promise<number> {
+  // Map model names to our database format
+  const modelMapping: { [key: string]: { provider: string, modelName: string, variant?: string | null } } = {
+    'gpt-4-0125-preview': { provider: 'openai', modelName: 'gpt-4', variant: 'turbo' },
+    'gpt-4o': { provider: 'openai', modelName: 'gpt-4o', variant: null },
+    'gpt-4o-mini': { provider: 'openai', modelName: 'gpt-4o', variant: 'mini' },
+    'o1-preview': { provider: 'openai', modelName: 'o1', variant: 'preview' },
+    'o1-mini': { provider: 'openai', modelName: 'o1', variant: 'mini' }
   }
   
-  return costs[model] || 10.00 // Default to gpt-4o pricing
+  const mapping = modelMapping[model]
+  if (mapping) {
+    const pricing = await getSpecificModelPricing(mapping.provider, mapping.modelName, mapping.variant)
+    if (pricing) {
+      return pricing.outputCostPerMillionTokens
+    }
+  }
+  
+  // Fallback to database pricing or default
+  const fallback = getFallbackPricing(model)
+  return fallback.outputCostPerMillionTokens
 }
 
 // Step 5: Cache Response
@@ -948,7 +1013,13 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
     quality_grading_ms: 0,
     prompt_compression_ms: 0,
     tier1_generation_ms: 0,
-    total_ms: 0
+    total_ms: 0,
+    sleipner_overhead_ms: 0,
+    model_api_calls_ms: 0,
+    grader_api_calls_ms: 0,
+    grader_classification_ms: 0,
+    grader_evaluation_ms: 0,
+    total_api_calls_ms: 0
   }
   
   // Step 1: Check Cache
@@ -960,73 +1031,74 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
   flowSteps[0].status = 'miss'
   flowSteps[0].details = 'No cached response found'
   flowSteps[0].timing = cacheResult.timing
+  flowSteps[0].cost = 0 // Cache check is always free
   
-  // Step 2: Try Tier-0 (Groq Llama-3-70B)
-  flowSteps.push({ step: 2, name: 'Tier-0 (Llama-3-70B)', status: 'calling', cost: 0, details: '', score: 0, passed: false })
-  const tier0Result = await callTier0(messages)
+  // Step 2: Prompt Compression (always applied)
+  flowSteps.push({ step: 2, name: 'Prompt Compression', status: 'compressing', cost: 0, details: '', score: 0, passed: false })
+  
+  // Combine all message content for compression
+  const fullPromptText = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n\n')
+  const compressionResult = await compressPrompt(fullPromptText, false) // Set to true for more aggressive compression
+  
+  totalCost += compressionResult.cost
+  costBreakdown.prompt_compression = compressionResult.cost
+  timingBreakdown.prompt_compression_ms = compressionResult.timing.duration_ms
+  
+  flowSteps[1].status = 'complete'
+  flowSteps[1].cost = 0 // Compression is "free" from user perspective
+  flowSteps[1].timing = compressionResult.timing
+  flowSteps[1].details = `Reduced from ${compressionResult.originalTokens} to ${compressionResult.compressedTokens} tokens (${Math.round(compressionResult.totalCompressionRatio * 100)}% reduction)`
+  flowSteps[1].compression_data = compressionResult
+  
+  // Create compressed messages for all subsequent calls
+  const compressedMessages = messages.map(msg => ({
+    ...msg,
+    content: msg.content // For now, keep original until we implement per-message compression
+  }))
+  
+  // Step 3: Try Tier-0 (Groq Llama-3-70B) with compressed prompt
+  flowSteps.push({ step: 3, name: 'Tier-0 (Llama-3-70B)', status: 'calling', cost: 0, details: '', score: 0, passed: false })
+  const tier0Result = await callTier0(compressedMessages)
   totalCost += tier0Result.cost
   costBreakdown.tier0_generation = tier0Result.cost
   timingBreakdown.tier0_generation_ms = tier0Result.timing.duration_ms
   
-  flowSteps[1].status = 'complete'
-  flowSteps[1].cost = tier0Result.cost
-  flowSteps[1].timing = tier0Result.timing
-  flowSteps[1].cost_breakdown = tier0Result.cost_breakdown
-  flowSteps[1].details = `Generated response (${tier0Result.completionTokens} tokens)${processedMessages.hasSystemPrompt ? ' with system context' : ''}`
-  flowSteps[1].tier0_response = tier0Result.content // Include actual response for playground
+  flowSteps[2].status = 'complete'
+  flowSteps[2].cost = 0 // Tier-0 is "free" from user perspective 
+  flowSteps[2].timing = tier0Result.timing
+  flowSteps[2].cost_breakdown = tier0Result.cost_breakdown
+  flowSteps[2].details = `Generated response (${tier0Result.completionTokens} tokens)${processedMessages.hasSystemPrompt ? ' with system context' : ''}`
+  flowSteps[2].tier0_response = tier0Result.content // Include actual response for playground
   
-  // Step 3: Grade Response (now includes system context)
-  flowSteps.push({ step: 3, name: 'Quality Grading (Haiku)', status: 'grading', cost: 0, details: '', score: 0, passed: false })
+  // Step 4: Grade Response (now includes system context)
+  flowSteps.push({ step: 4, name: 'Quality Grading (Haiku)', status: 'grading', cost: 0, details: '', score: 0, passed: false })
   const gradeResult = await gradeResponse(query, tier0Result.content, systemContext)
   totalCost += gradeResult.cost
   costBreakdown.quality_grading = gradeResult.cost
   timingBreakdown.quality_grading_ms = gradeResult.timing.duration_ms
   
-  flowSteps[2].status = 'complete'
-  flowSteps[2].cost = gradeResult.cost
-  flowSteps[2].timing = gradeResult.timing
-  flowSteps[2].cost_breakdown = gradeResult.cost_breakdown
-  flowSteps[2].details = `Score: ${gradeResult.score}/100 (threshold: ${gradeResult.threshold}) | Type: ${gradeResult.questionType} | Confidence: ${gradeResult.confidence} | Variance: ${gradeResult.variance}${systemContext ? ' - evaluated with system context' : ''}`
-  flowSteps[2].score = gradeResult.score
-  flowSteps[2].passed = gradeResult.passed && !forceEscalate
-  flowSteps[2].questionType = gradeResult.questionType
-  flowSteps[2].dimensionScores = gradeResult.dimensionScores
-  flowSteps[2].confidence = gradeResult.confidence
-  flowSteps[2].variance = gradeResult.variance
-  flowSteps[2].threshold = gradeResult.threshold
-  flowSteps[2].grader_reasoning = `Multi-dimensional evaluation by Claude Haiku (Question type: ${gradeResult.questionType})${forceEscalate ? ' (manually overridden for testing)' : ''}` // For playground display
+  flowSteps[3].status = 'complete'
+  flowSteps[3].cost = 0 // Grading is "free" from user perspective
+  flowSteps[3].timing = gradeResult.timing
+  flowSteps[3].cost_breakdown = gradeResult.cost_breakdown
+  flowSteps[3].details = `Score: ${gradeResult.score}/100 (threshold: ${gradeResult.threshold}) | Type: ${gradeResult.questionType} | Confidence: ${gradeResult.confidence} | Variance: ${gradeResult.variance}${systemContext ? ' - evaluated with system context' : ''}`
+  flowSteps[3].score = gradeResult.score
+  flowSteps[3].passed = gradeResult.passed && !forceEscalate
+  flowSteps[3].questionType = gradeResult.questionType
+  flowSteps[3].dimensionScores = gradeResult.dimensionScores
+  flowSteps[3].confidence = gradeResult.confidence
+  flowSteps[3].variance = gradeResult.variance
+  flowSteps[3].threshold = gradeResult.threshold
+  flowSteps[3].grader_reasoning = `Multi-dimensional evaluation by Claude Haiku (Question type: ${gradeResult.questionType})${forceEscalate ? ' (manually overridden for testing)' : ''}` // For playground display
   
   if (gradeResult.passed && !forceEscalate) {
     // Quality passed - use Tier-0 response
     finalResponse = tier0Result.content
     finalModel = 'groq-llama-3-70b'
-    flowSteps.push({ step: 4, name: 'Result', status: 'tier0_success', details: 'Quality threshold met - using Tier-0 response' })
+    flowSteps.push({ step: 5, name: 'Result', status: 'tier0_success', details: 'Quality threshold met - using Tier-0 response' })
   } else {
-    // Quality failed - compress prompt before escalating to Tier-1
-    flowSteps.push({ step: 4, name: 'Prompt Compression', status: 'compressing', cost: 0 })
-    
-    // Combine all message content for compression
-    const fullPromptText = messages.map(msg => `${msg.role}: ${msg.content}`).join('\n\n')
-    const compressionResult = await compressPrompt(fullPromptText, false) // Set to true for more aggressive compression
-    
-    totalCost += compressionResult.cost
-    costBreakdown.prompt_compression = compressionResult.cost
-    timingBreakdown.prompt_compression_ms = compressionResult.timing.duration_ms
-    
-    flowSteps[3].status = 'complete'
-    flowSteps[3].cost = compressionResult.cost
-    flowSteps[3].timing = compressionResult.timing
-    flowSteps[3].details = `Reduced from ${compressionResult.originalTokens} to ${compressionResult.compressedTokens} tokens (${Math.round(compressionResult.totalCompressionRatio * 100)}% reduction)`
-    flowSteps[3].compression_data = compressionResult
-    
-    // Now escalate to Tier-1 with compressed prompt
+    // Quality failed - escalate to Tier-1 using already compressed prompt
     flowSteps.push({ step: 5, name: 'Tier-1 (GPT-4)', status: 'calling', cost: 0 })
-    
-    // Create compressed messages for Tier-1 call
-    const compressedMessages = messages.map(msg => ({
-      ...msg,
-      content: msg.content // For now, keep original until we implement per-message compression
-    }))
     
     const tier1Result = await callTier1(compressedMessages, requestedModel, compressionResult, openaiKey)
     totalCost += tier1Result.cost
@@ -1039,7 +1111,7 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
     flowSteps[4].cost = tier1Result.cost
     flowSteps[4].timing = tier1Result.timing
     flowSteps[4].cost_breakdown = tier1Result.cost_breakdown
-    flowSteps[4].details = `Escalated with compressed prompt${processedMessages.hasSystemPrompt ? ' (system context preserved)' : ''}`
+    flowSteps[4].details = `Escalated with pre-compressed prompt${processedMessages.hasSystemPrompt ? ' (system context preserved)' : ''}`
   }
   
   // Step 6: Cache final response
@@ -1049,8 +1121,33 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
   costBreakdown.total = totalCost
   timingBreakdown.total_ms = flowEndTime - flowStartTime
   
+  // Calculate Sleipner overhead vs model API call time
+  const tier0Timing = flowSteps[2]?.timing as { api_call_ms?: number } | undefined
+  const tier1Timing = flowSteps[4]?.timing as { api_call_ms?: number } | undefined
+  const graderTiming = flowSteps[3]?.timing as { api_call_ms?: number; classification_ms?: number; evaluation_ms?: number } | undefined
+  
+  const modelApiCallTime = (tier0Timing?.api_call_ms || 0) + 
+                          (tier1Timing?.api_call_ms || 0) // Tier-0 + Tier-1 if used
+  const graderApiCallTime = graderTiming?.api_call_ms || 0
+  const graderClassificationTime = graderTiming?.classification_ms || 0
+  const graderEvaluationTime = graderTiming?.evaluation_ms || 0
+  const totalApiCallTime = modelApiCallTime + graderApiCallTime
+  
+  // Sleipner overhead = total time - actual API calls
+  const sleipnerOverheadTime = timingBreakdown.total_ms - totalApiCallTime
+  
+  timingBreakdown.sleipner_overhead_ms = sleipnerOverheadTime
+  timingBreakdown.model_api_calls_ms = modelApiCallTime
+  timingBreakdown.grader_api_calls_ms = graderApiCallTime
+  timingBreakdown.grader_classification_ms = graderClassificationTime
+  timingBreakdown.grader_evaluation_ms = graderEvaluationTime
+  timingBreakdown.total_api_calls_ms = totalApiCallTime
+  
   // Calculate cost savings vs direct GPT-4 usage
-  const directGPT4Cost = 0.02 // Rough estimate
+      // Calculate direct GPT-4 cost using database pricing
+    const gpt4Pricing = await getSpecificModelPricing('openai', 'gpt-4o', null) || 
+                        getFallbackPricing('gpt-4o')
+    const directGPT4Cost = calculateCost(gpt4Pricing, tier0Result.promptTokens, tier0Result.completionTokens)
   const costSavings = Math.max(0, directGPT4Cost - totalCost)
   const costSavingsPercent = directGPT4Cost > 0 ? Math.round((costSavings / directGPT4Cost) * 100) : 0
   
@@ -1063,6 +1160,12 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
     systemContextApplied: processedMessages.hasSystemPrompt,
     performance_metrics: {
       total_response_time_ms: timingBreakdown.total_ms,
+      sleipner_overhead_ms: timingBreakdown.sleipner_overhead_ms,
+      model_api_calls_ms: timingBreakdown.model_api_calls_ms,
+      grader_api_calls_ms: timingBreakdown.grader_api_calls_ms,
+      grader_classification_ms: timingBreakdown.grader_classification_ms,
+      grader_evaluation_ms: timingBreakdown.grader_evaluation_ms,
+      total_api_calls_ms: timingBreakdown.total_api_calls_ms,
       total_cost_usd: totalCost,
       cost_savings_usd: costSavings,
       cost_savings_percent: costSavingsPercent,
@@ -1078,6 +1181,12 @@ async function runCascadeFlow(messages: Message[], requestedModel: string, force
 }
 
 export async function POST(request: NextRequest) {
+  const requestStartTime = Date.now()
+  const requestId = `req_${Date.now()}${Math.random().toString(36).substr(2, 6)}`
+  let userId: string | undefined
+  let apiKeyId: string | undefined
+  let requestBody: unknown
+  
   try {
     // Check for debug mode (query param or header)
     const { searchParams } = new URL(request.url)
@@ -1087,13 +1196,11 @@ export async function POST(request: NextRequest) {
     const debugMode = debugParam === 'full' || debugParam === 'true' || debugHeader === 'full' || debugHeader === 'flow,timing'
 
     // Check for API key ID header (from playground) or Authorization header (from direct API usage)
-    const apiKeyId = request.headers.get('x-api-key-id')
+    apiKeyId = request.headers.get('x-api-key-id') || undefined
     const authHeader = request.headers.get('authorization')
     
     // Check for optional OpenAI API key header (for BYOK - Bring Your Own Key)
     const openaiKeyHeader = request.headers.get('x-openai-key')
-    
-    let userId: string
 
     if (apiKeyId) {
       // Playground usage - look up API key by ID
@@ -1124,8 +1231,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse the request body
-    const body = await request.json()
-    const { messages, model = 'gpt-3.5-turbo' } = body
+    requestBody = await request.json()
+    const { messages, model = 'gpt-3.5-turbo' } = requestBody as { messages?: unknown[], model?: string }
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -1140,39 +1247,102 @@ export async function POST(request: NextRequest) {
     const promptTokens = (messages as Message[]).reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0)
     const completionTokens = Math.ceil((cascadeResult.response || '').length / 4)
     
-    // Generate request ID for tracing
-    const requestId = `req_${Date.now()}${Math.random().toString(36).substr(2, 6)}`
-    
     // Calculate baseline savings (what they would have paid for direct premium model)
-    const directPremiumCost = (promptTokens * 0.01 + completionTokens * 0.03) / 1000 // GPT-4 pricing
+    // Calculate direct premium cost using database pricing  
+    const premiumPricing = await getSpecificModelPricing('openai', 'gpt-4o', null) || 
+                          getFallbackPricing('gpt-4o')
+    const directPremiumCost = calculateCost(premiumPricing, promptTokens, completionTokens)
     const baselineSavings = Math.max(0, directPremiumCost - cascadeResult.cost)
     
-    // Build minimal sleipner object (Ring 1)
-    const sleipnerCore = {
-      request_id: requestId,
-      actual_model: cascadeResult.model,
-      tier_used: cascadeResult.performance_metrics?.tier_used || 'unknown',
-      total_cost_usd: Number(cascadeResult.cost.toFixed(6)),
-      tokens: {
-        prompt: promptTokens,
-        completion: completionTokens
-      },
-      baseline_savings_usd: Number(baselineSavings.toFixed(6)),
-      version: '2025-01-16'
+    // Calculate detailed cost comparison using tiktoken for accurate OpenAI token counting
+    let costComparison: CostComparison | undefined
+    try {
+      const costComparisonMessages: CostComparisonMessage[] = (messages as Message[]).map(msg => ({
+        role: msg.role as 'system' | 'user' | 'assistant',
+        content: msg.content
+      }))
+      
+      costComparison = await calculateCostComparison(
+        costComparisonMessages,
+        cascadeResult.response || '',
+        cascadeResult.model,
+        model, // requested OpenAI model
+        cascadeResult.cost
+      )
+    } catch (error) {
+      console.error('Error calculating cost comparison:', error)
+      // Continue without cost comparison if it fails
     }
     
-    // Add debug data if requested (Ring 2)
+    // Build clean sleipner response object
+    const sleipnerCore = {
+      // Core identification
+      requestId: requestId,
+      actualModel: cascadeResult.model,
+      tierUsed: cascadeResult.performance_metrics?.tier_used || 'unknown',
+      totalCost: Number(cascadeResult.cost.toFixed(6)),
+      baselineSavings: Number(baselineSavings.toFixed(6)),
+      version: '2025-01-16',
+      
+      // Token information
+      tokens: {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: promptTokens + completionTokens
+      },
+      
+      // Performance timing (always present)
+      performance: {
+        totalResponseTime: cascadeResult.performance_metrics?.total_response_time_ms || 0,
+        sleipnerOverhead: cascadeResult.performance_metrics?.sleipner_overhead_ms || 0,
+        modelApiCalls: cascadeResult.performance_metrics?.model_api_calls_ms || 0,
+        graderApiCalls: cascadeResult.performance_metrics?.grader_api_calls_ms || 0,
+        graderClassification: cascadeResult.performance_metrics?.grader_classification_ms || 0,
+        graderEvaluation: cascadeResult.performance_metrics?.grader_evaluation_ms || 0
+      },
+      
+      // Quality metrics (always present)
+      quality: {
+        score: cascadeResult.performance_metrics?.quality_score || 0,
+        passed: cascadeResult.performance_metrics?.tier_used === 'tier-0',
+        compressionApplied: cascadeResult.performance_metrics?.compression_applied || false
+      },
+      
+      // Cost comparison (when available)
+      costComparison: costComparison
+    }
+    
+    // Add debug data if requested
     const sleipnerPayload = debugMode ? {
       ...sleipnerCore,
       debug: {
-        user_id: userId,
-        requested_model: model,
-        performance_metrics: cascadeResult.performance_metrics,
-        cost_breakdown: cascadeResult.cost_breakdown,
-        timing_breakdown: cascadeResult.timing_breakdown,
-        flow_steps: cascadeResult.flow,
-        cached: cascadeResult.cached,
-        system_context_applied: cascadeResult.systemContextApplied
+        userId: userId,
+        requestedModel: model,
+        systemContextApplied: cascadeResult.systemContextApplied || false,
+        cached: cascadeResult.cached || false,
+        
+        // Detailed cost breakdown
+        costBreakdown: {
+          cacheCheck: cascadeResult.cost_breakdown?.cache_check || 0,
+          tier0Generation: cascadeResult.cost_breakdown?.tier0_generation || 0,
+          qualityGrading: cascadeResult.cost_breakdown?.quality_grading || 0,
+          promptCompression: cascadeResult.cost_breakdown?.prompt_compression || 0,
+          tier1Generation: cascadeResult.cost_breakdown?.tier1_generation || 0,
+          total: cascadeResult.cost_breakdown?.total || 0
+        },
+        
+        // Detailed timing breakdown
+        timingBreakdown: {
+          cacheCheck: cascadeResult.timing_breakdown?.cache_check_ms || 0,
+          tier0Generation: cascadeResult.timing_breakdown?.tier0_generation_ms || 0,
+          qualityGrading: cascadeResult.timing_breakdown?.quality_grading_ms || 0,
+          promptCompression: cascadeResult.timing_breakdown?.prompt_compression_ms || 0,
+          tier1Generation: cascadeResult.timing_breakdown?.tier1_generation_ms || 0,
+          total: cascadeResult.timing_breakdown?.total_ms || 0
+        },
+        
+        // Flow steps for debugging
+        flowSteps: cascadeResult.flow || []
       }
     } : sleipnerCore
     
@@ -1209,9 +1379,54 @@ export async function POST(request: NextRequest) {
       'X-Sleipner-Savings': baselineSavings.toFixed(6)
     })
 
+    // Log the successful API request asynchronously (non-blocking)
+    const responseTimeMs = Date.now() - requestStartTime
+    logApiRequestAsync({
+      requestId,
+      userId,
+      apiKeyId: apiKeyId || undefined,
+      endpoint: '/api/v1/chat/completions',
+      httpMethod: 'POST',
+      requestData: requestBody,
+      responseData: debugMode ? response : { 
+        // Store minimal response data for non-debug requests
+        choices_count: response.choices.length,
+        completion_length: response.choices[0]?.message?.content?.length || 0,
+        finish_reason: response.choices[0]?.finish_reason
+      },
+      responseStatus: 'success',
+      modelRequested: model,
+      modelUsed: cascadeResult.model,
+      tierUsed: cascadeResult.performance_metrics?.tier_used,
+      totalCostUsd: cascadeResult.cost,
+      responseTimeMs,
+      sleipnerOverheadMs: cascadeResult.performance_metrics?.sleipner_overhead_ms,
+      modelApiCallsMs: cascadeResult.performance_metrics?.model_api_calls_ms,
+      graderApiCallsMs: cascadeResult.performance_metrics?.grader_api_calls_ms,
+      inputTokens: promptTokens,
+      outputTokens: completionTokens,
+      qualityScore: cascadeResult.performance_metrics?.quality_score,
+      qualityPassed: cascadeResult.performance_metrics?.tier_used === 'tier-0'
+    })
+
     return NextResponse.json(response, { headers })
   } catch (error) {
     console.error('Error in chat completions:', error)
+    
+    // Log the failed API request asynchronously (non-blocking)
+    const responseTimeMs = Date.now() - requestStartTime
+    logApiRequestAsync({
+      requestId,
+      userId,
+      apiKeyId: apiKeyId || undefined,
+      endpoint: '/api/v1/chat/completions',
+      httpMethod: 'POST',
+      requestData: requestBody || {},
+      responseStatus: 'error',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      responseTimeMs
+    })
+    
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
