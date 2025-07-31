@@ -54,11 +54,11 @@ export const Features = () => {
             Why Choose Sleipner
           </h2>
           <p className="text-center text-slate-400 mb-12">
-            Advanced AI routing with semantic caching & compression that cuts spend without adding complexity.
+            Advanced AI optimization that cuts spend without adding complexity.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-6 sm:gap-8 lg:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 sm:gap-8 lg:gap-12">
           {features.map(({ icon: Icon, title, desc, metric }) => (
             <div
               key={title}
