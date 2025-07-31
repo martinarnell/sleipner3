@@ -8,7 +8,7 @@ import {
 const faqs = [
   {
     question: 'What if Sleipner doesn\'t save us money?',
-    answer: 'You pay nothing beyond the flat platform fee; no hidden charges.',
+    answer: 'You pay nothing; no hidden charges.',
   },
   {
     question: 'Is it a drop-in replacement for the OpenAI API?',

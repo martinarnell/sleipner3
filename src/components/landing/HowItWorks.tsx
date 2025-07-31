@@ -23,7 +23,7 @@ const steps = [
 
 export const HowItWorks = () => {
   return (
-    <section id="how-it-works" className="relative py-24 bg-black overflow-hidden">
+    <section id="how-it-works" className="relative pt-40 pb-24 bg-black overflow-hidden">
       <div className="relative container mx-auto px-6">
         <div className="text-center mb-20">
           <h2 className="text-4xl md:text-5xl font-bold mb-4">How Sleipner Saves You Money</h2>

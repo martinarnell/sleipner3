@@ -1,66 +1,73 @@
-import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { DollarSign, Zap, Code, CheckCircle, Shield } from './icons'
+import { Zap, ShieldCheck, Code2, Key, Coins } from 'lucide-react';
 
 const features = [
   {
-    icon: <Zap className="h-8 w-8 text-primary" />,
-    title: '🧭 Intelligent Routing',
-    description: 'Up to 75% savings by matching each query to the cheapest capable model.',
-    benefit: '75% savings'
+    icon: Zap,
+    title: 'Intelligent Routing',
+    desc: 'Right-sizes every prompt to the cheapest capable model.',
+    metric: 'Up to 75% savings',
   },
   {
-    icon: <CheckCircle className="h-8 w-8 text-primary" />,
-    title: '✅ Automatic Quality Guardrails',
-    description: '99.9% quality retention—every response scored on accuracy, relevance & coherence.',
-    benefit: '99.9% quality retention'
+    icon: ShieldCheck,
+    title: 'Quality Guardrails',
+    desc: 'Judge models auto-retry below 90/100 score.',
+    metric: '99.9% quality kept',
   },
   {
-    icon: <Code className="h-8 w-8 text-primary" />,
-    title: '⚡ 2-Minute Integration',
-    description: 'Just swap your base URL; keep your existing prompts & SDKs.',
-    benefit: '2-minute setup'
+    icon: Code2,
+    title: '2-Minute Integration',
+    desc: 'Swap the base URL—no prompt changes, no SDK lock-in.',
+    metric: '< 10 LOC',
   },
   {
-    icon: <Shield className="h-8 w-8 text-primary" />,
-    title: '🔐 Bring-Your-Own-Provider-Key',
-    description: 'Keep your existing OpenAI / Anthropic account and quotas. Keys forwarded securely, never stored.',
-    benefit: 'Full security control'
+    icon: Key,
+    title: 'Bring Your Own Keys',
+    desc: 'Forward your OpenAI / Anthropic keys; we never store them.',
+    metric: 'Full data control',
   },
   {
-    icon: <DollarSign className="h-8 w-8 text-primary" />,
-    title: '💸 Performance-Based Pricing',
-    description: 'Pay 25% of the savings we deliver—if we save zero, you pay zero.',
-    benefit: 'Zero risk'
+    icon: Coins,
+    title: 'Pay-as-You-Save',
+    desc: '25% of realised savings; €0 if we save you €0.',
+    metric: 'Zero risk',
   },
-]
+];
 
 export const Features = () => {
   return (
-    <section id="features" className="relative py-16 sm:py-20 lg:py-24 bg-black overflow-hidden">
-      <div className="relative container mx-auto px-6">
-        <div className="text-center mb-12 sm:mb-16 lg:mb-20">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">Why Choose Sleipner</h2>
-          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed px-4 sm:px-0">
-            Advanced AI routing technology that delivers results without the complexity.
+    <section id="features" className="pt-20 pb-24">
+      <div className="container mx-auto px-6">
+        <div className="text-center mb-12">
+          <h2 className="text-center text-4xl font-bold mb-4">
+            Why Choose Sleipner
+          </h2>
+          <p className="text-center text-slate-400 mb-12">
+            Advanced AI routing that cuts spend without adding complexity.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 sm:gap-8">
-          {features.map((feature, i) => (
-            <Card key={i} className="group bg-background/80 backdrop-blur-sm border border-primary/10 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1">
-              <CardHeader className="text-center pb-4">
-                <div className="mx-auto mb-4 p-4 rounded-2xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                  {React.cloneElement(feature.icon, { className: "h-8 w-8 text-primary mx-auto" })}
-                </div>
-              </CardHeader>
-              <CardContent className="text-center">
-                <CardTitle className="mb-3 text-xl">{feature.title}</CardTitle>
-                <p className="text-muted-foreground leading-relaxed mb-4">{feature.description}</p>
-                <div className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full">
-                  {feature.benefit}
-                </div>
-              </CardContent>
-            </Card>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
+          {features.map(({ icon: Icon, title, desc, metric }) => (
+            <div
+              key={title}
+              className="rounded-2xl bg-slate-900/60 p-6 ring-1 ring-slate-800/50
+                         hover:ring-slate-600 hover:-translate-y-1 transition transform w-64 lg:w-72 mx-auto"
+            >
+              <div className="h-11 w-11 flex items-center justify-center
+                              rounded-full bg-slate-800 ring-1 ring-cyan-500/30">
+                <Icon className="h-5 w-5 stroke-[2.2] text-cyan-400" aria-label={`${title} icon`} />
+              </div>
+              <h3 className="text-base font-semibold text-slate-100 mt-4">
+                {title}
+              </h3>
+              <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+                {desc}
+              </p>
+              <span className="inline-block mt-4 px-3 py-1 text-xs font-medium rounded-full
+                                bg-slate-800/80 text-slate-300 ring-1 ring-blue-500/40">
+                {metric}
+              </span>
+            </div>
           ))}
         </div>
       </div>

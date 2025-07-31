@@ -148,11 +148,11 @@ function SignInForm() {
             </p>
           </div>
 
-          <div className="mt-4 text-center">
+          {/* <div className="mt-4 text-center">
             <p className="text-sm text-muted-foreground">
               By signing in, you agree to our Terms of Service and Privacy Policy.
             </p>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>

@@ -35,7 +35,7 @@ const testimonials = [
     quote: "Sleipner's routing saves us $18k a year. Wish we'd had it six months sooner.",
     author: "Marcus Enberg", 
     role: "Head of Engineering",
-    company: "Gasell"
+    company: "Gasell Gen"
   }
 ]
 

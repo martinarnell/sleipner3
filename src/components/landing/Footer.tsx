@@ -18,14 +18,14 @@ export const Footer = () => {
           </div>
           
           <div className="flex items-center gap-6 mb-4 md:mb-0">
-            <div className="flex gap-4">
+            {/* <div className="flex gap-4">
               <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground">
                 Terms of Service
               </Link>
               <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground">
                 Privacy Policy
               </Link>
-            </div>
+            </div> */}
             <p className="text-sm text-muted-foreground">
               © {new Date().getFullYear()} Sleipner.ai. All rights reserved.
             </p>
