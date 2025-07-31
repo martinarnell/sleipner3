@@ -49,7 +49,7 @@ export const Hero = () => {
           >
             Request Beta Access
           </CTAButton>
-          <Button 
+          {/* <Button 
             asChild 
             size="lg" 
             variant="outline" 
@@ -58,7 +58,7 @@ export const Hero = () => {
             <Link href="/#how-it-works" className="flex items-center gap-2">
               → How it works
             </Link>
-          </Button>
+          </Button> */}
         </div>
 
         {/* Social proof text with improved hierarchy */}
