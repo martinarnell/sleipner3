@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/martinarnell/sleipner3#readme",
   "dependencies": {
+    "@dqbd/tiktoken": "^1.0.21",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",

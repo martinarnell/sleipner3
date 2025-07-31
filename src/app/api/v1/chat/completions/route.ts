@@ -1,10 +1,173 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { get_encoding } from '@dqbd/tiktoken'
 import { verifyApiKey, verifyApiKeyById } from '@/lib/api-keys'
 import { getSpecificModelPricing, calculateCost, getFallbackPricing, getGraderModelPricing } from '@/lib/pricing'
 import { logApiRequestAsync } from '@/lib/api-logging'
 import { calculateCostComparison, type CostComparison, type Message as CostComparisonMessage } from '@/lib/cost-comparison'
 
 // ========== SLEIPNER CASCADE SYSTEM ==========
+
+// Token counting utility - uses existing sophisticated tiktoken implementation
+function countTokens(text: string): number {
+  try {
+    const encoding = get_encoding("cl100k_base")
+    const tokens = encoding.encode(text).length
+    encoding.free()
+    return tokens
+  } catch (error) {
+    console.error('Token counting failed, falling back to approximation:', sanitizeErrorMessage(error))
+    // Fallback to length/4 if tiktoken fails
+    return Math.ceil(text.length / 4)
+  }
+}
+
+// Helper to count tokens with message formatting overhead
+function countTokensWithOverhead(messages: Message[], responseContent = ''): { inputTokens: number; outputTokens: number } {
+  try {
+    // Convert to cost-comparison format and use their robust counting
+    const costMessages = messages.map(msg => ({
+      role: msg.role as 'system' | 'user' | 'assistant',
+      content: msg.content
+    }))
+    
+    // Import the robust token counting from cost-comparison
+    const encoding = get_encoding("cl100k_base")
+    
+    // Count input tokens with proper message overhead
+    let inputTokens = 0
+    const tokensPerMessage = 3 // <|start|>{role/name}\n{content}<|end|>\n
+    
+    for (const message of costMessages) {
+      inputTokens += tokensPerMessage
+      inputTokens += encoding.encode(message.content).length
+      inputTokens += encoding.encode(message.role).length
+    }
+    inputTokens += 3 // reply priming tokens
+    
+    const outputTokens = encoding.encode(responseContent).length
+    encoding.free()
+    
+    return { inputTokens, outputTokens }
+  } catch (error) {
+    console.error('Message token counting failed, falling back to approximation:', sanitizeErrorMessage(error))
+    const inputTokens = messages.reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0)
+    const outputTokens = Math.ceil(responseContent.length / 4)
+    return { inputTokens, outputTokens }
+  }
+}
+
+// ========== ROBUST FETCH UTILITY ==========
+
+// Robust fetch with timeout, retries, and exponential backoff
+async function fetchWithRetry(
+  url: string, 
+  options: RequestInit, 
+  retries = 3, 
+  timeoutMs = 30000
+): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  
+  const fetchOptions = {
+    ...options,
+    signal: controller.signal
+  }
+  
+  let lastError: Error | null = null
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, fetchOptions)
+      clearTimeout(timeoutId)
+      
+      // Check if we should retry based on status code
+      if (response.status >= 500 || response.status === 429) {
+        if (attempt === retries) {
+          return response // Return the failed response on final attempt
+        }
+        
+        // Wait with exponential backoff + jitter
+        const baseDelay = Math.min(1000 * Math.pow(2, attempt), 10000)
+        const jitter = Math.random() * 1000
+        await new Promise(resolve => setTimeout(resolve, baseDelay + jitter))
+        continue
+      }
+      
+      return response
+    } catch (error) {
+      lastError = error as Error
+      clearTimeout(timeoutId)
+      
+      if (attempt === retries) {
+        throw lastError
+      }
+      
+      // Don't retry on abort errors unless it's a timeout
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error
+      }
+      
+      // Wait with exponential backoff for network errors
+      const baseDelay = Math.min(1000 * Math.pow(2, attempt), 10000)
+      const jitter = Math.random() * 1000
+      await new Promise(resolve => setTimeout(resolve, baseDelay + jitter))
+    }
+  }
+  
+  throw lastError || new Error('Fetch failed after all retries')
+}
+
+// ========== SECURITY UTILITIES ==========
+
+// Sanitize sensitive data for logging
+function sanitizeForLogging(data: unknown): unknown {
+  if (!data || typeof data !== 'object') {
+    return data
+  }
+  
+  const sanitized = { ...data as Record<string, unknown> }
+  
+  // Strip API keys and sensitive headers
+  const sensitiveKeys = [
+    'authorization', 'x-api-key', 'x-openai-key', 'api-key', 'bearer',
+    'groq_key', 'anthropic_key', 'openai_key', 'key', 'token', 'secret'
+  ]
+  
+  for (const key of Object.keys(sanitized)) {
+    const lowerKey = key.toLowerCase()
+    if (sensitiveKeys.some(sensitiveKey => lowerKey.includes(sensitiveKey))) {
+      sanitized[key] = '[REDACTED]'
+    }
+    
+    // Also sanitize nested objects
+    if (sanitized[key] && typeof sanitized[key] === 'object') {
+      sanitized[key] = sanitizeForLogging(sanitized[key])
+    }
+  }
+  
+  return sanitized
+}
+
+// Sanitize error messages to avoid leaking keys
+function sanitizeErrorMessage(error: unknown): string {
+  if (!error) return 'Unknown error'
+  
+  let message = error instanceof Error ? error.message : String(error)
+  
+  // Pattern to match potential API keys (various formats)
+  const keyPatterns = [
+    /sk-[a-zA-Z0-9]{32,}/g,  // OpenAI style
+    /xai-[a-zA-Z0-9-]{32,}/g, // Anthropic style
+    /gsk_[a-zA-Z0-9]{32,}/g,  // Groq style
+    /[a-zA-Z0-9]{32,64}/g     // Generic long alphanumeric strings
+  ]
+  
+  for (const pattern of keyPatterns) {
+    message = message.replace(pattern, '[API_KEY_REDACTED]')
+  }
+  
+  return message
+}
 
 // ========== PROMPT COMPRESSION SYSTEM ==========
 
@@ -79,9 +242,9 @@ function compressPromptLossless(text: string): {
     }
   }
 
-  // Calculate approximate token counts (rough estimate: 4 chars = 1 token)
-  const originalTokens = Math.ceil(text.length / 4)
-  const compressedTokens = Math.ceil(compressed.length / 4)
+  // Calculate accurate token counts using tiktoken
+  const originalTokens = countTokens(text)
+  const compressedTokens = countTokens(compressed)
   const compressionRatio = originalTokens > 0 ? (originalTokens - compressedTokens) / originalTokens : 0
 
   return {
@@ -107,7 +270,7 @@ async function compressPromptSemantic(text: string): Promise<{
   // 2. Calculate semantic similarity with embeddings
   // 3. Apply safety checks and fall back if needed
   
-  const originalTokens = Math.ceil(text.length / 4)
+  const originalTokens = countTokens(text)
   
   return {
     compressed: text, // No compression for now
@@ -260,7 +423,7 @@ async function callTier0(messages: Message[]) {
     )
 
     const apiCallStart = Date.now()
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${groqApiKey}`,
@@ -314,60 +477,50 @@ async function callTier0(messages: Message[]) {
       }
     }
   } catch (error) {
-    console.error('Groq API call failed:', error)
+    console.error('Groq API call failed:', sanitizeErrorMessage(error))
     throw new Error('Failed to call Groq API')
   }
 }
 
-// Step 3: Multi-Dimensional Response Grading
+// Step 3: Single-Shot Response Grading (optimized from 6 calls to 1)
 async function gradeResponse(query: string, response: string, systemContext?: string) {
   const startTime = Date.now()
   
   try {
-    // First classify the question
-    const classificationResult = await classifyQuestion(query, systemContext)
-    
-    // Then evaluate all dimensions
-    const result = await evaluateMultiDimensional(query, response, classificationResult.type, systemContext)
+    // Single API call for classification + evaluation
+    const result = await gradeResponseOneShot(query, response, systemContext)
     
     const endTime = Date.now()
-    const totalCost = classificationResult.cost + result.cost
     
     return {
       score: result.weightedComposite,
       passed: result.passed,
-      reasoning: `Multi-dimensional: ${result.dimensionScores.map(d => `${d.dimension}:${d.score}`).join(', ')}`,
-      cost: totalCost,
+      reasoning: `One-shot grading: ${result.dimensionScores.map(d => `${d.dimension}:${d.score}`).join(', ')}`,
+      cost: result.cost,
       timing: {
         duration_ms: endTime - startTime,
-        api_call_ms: classificationResult.timing + result.timing,
-        classification_ms: classificationResult.timing,
-        evaluation_ms: result.timing,
+        api_call_ms: result.timing,
+        classification_ms: 0, // No longer separate
+        evaluation_ms: result.timing, // Single call handles both
         start_time: startTime,
         end_time: endTime
       },
-      cost_breakdown: {
-        ...result.cost_breakdown,
-        classification: {
-          cost: classificationResult.cost,
-          timing_ms: classificationResult.timing
-        }
-      },
+      cost_breakdown: result.cost_breakdown,
       threshold: result.threshold,
       questionType: result.questionType,
       dimensionScores: result.dimensionScores,
       confidence: result.confidence,
       variance: result.variance,
-      grader: 'multi-dimensional'
+      grader: 'one-shot-optimized'
     }
   } catch (error) {
-    console.error('Multi-dimensional grading error:', error)
+    console.error('One-shot grading error:', sanitizeErrorMessage(error))
     const errorEndTime = Date.now()
     const fallbackTiming = errorEndTime - startTime
     return {
       score: 50,
       passed: false,
-      reasoning: 'Multi-dimensional grading failed',
+      reasoning: 'One-shot grading failed',
       cost: 0,
       timing: {
         duration_ms: fallbackTiming,
@@ -383,7 +536,7 @@ async function gradeResponse(query: string, response: string, systemContext?: st
       dimensionScores: [],
       confidence: 0,
       variance: 0,
-      grader: 'multi-dimensional-fallback'
+      grader: 'one-shot-fallback'
     }
   }
 }
@@ -398,138 +551,8 @@ interface RubricDimension {
   criteriaMapping: { [scoreRange: string]: string };
 }
 
-interface DimensionScore {
-  dimension: string;
-  score: number;
-  reasoning: string;
-  confidence: number;
-}
-
-interface MultiDimensionalResult {
-  questionType: 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL';
-  dimensionScores: DimensionScore[];
-  weightedComposite: number;
-  confidence: number;
-  variance: number;
-  threshold: number;
-  passed: boolean;
-  cost: number;
-  timing: number;
-  cost_breakdown: Record<string, unknown>;
-}
-
-const DIMENSIONS: { [key: string]: RubricDimension } = {
-  ACCURACY: {
-    name: "Accuracy",
-    description: "Factual correctness and freedom from errors",
-    scale: 10,
-    weight: 0, // Will be set by question type
-    evaluationPrompt: `Rate the factual accuracy of this response (1-10):
-    - Are all facts correct and verifiable?
-    - Is there any misinformation or errors?
-    - Are numbers, dates, and specific claims accurate?
-    
-    10: Completely accurate, all facts verified
-    8-9: Mostly accurate with minor imprecisions
-    6-7: Some inaccuracies but generally correct
-    4-5: Several inaccuracies present
-    1-3: Major factual errors or misinformation`,
-    criteriaMapping: {
-      "9-10": "Completely accurate, all facts verified",
-      "7-8": "Mostly accurate with minor imprecisions", 
-      "5-6": "Some inaccuracies present",
-      "1-4": "Major factual errors or misinformation"
-    }
-  },
-  COMPLETENESS: {
-    name: "Completeness", 
-    description: "Thoroughness in addressing all aspects of the question",
-    scale: 10,
-    weight: 0,
-    evaluationPrompt: `Rate how completely this response addresses the question (1-10):
-    - Are all parts of the question answered?
-    - Are key aspects covered adequately?
-    - Is important context or information missing?
-    
-    10: Completely comprehensive, all aspects covered
-    8-9: Covers most aspects thoroughly
-    6-7: Covers main points but misses some details
-    4-5: Partially complete, significant gaps
-    1-3: Incomplete, major aspects unaddressed`,
-    criteriaMapping: {
-      "9-10": "Completely comprehensive",
-      "7-8": "Covers most aspects thoroughly",
-      "5-6": "Covers main points but misses details", 
-      "1-4": "Incomplete, major gaps"
-    }
-  },
-  CLARITY: {
-    name: "Clarity",
-    description: "Clear communication and readability",
-    scale: 10, 
-    weight: 0,
-    evaluationPrompt: `Rate the clarity and readability of this response (1-10):
-    - Is the explanation clear and easy to understand?
-    - Is the structure logical and well-organized?
-    - Are complex concepts explained simply?
-    
-    10: Exceptionally clear and well-structured
-    8-9: Clear with good organization
-    6-7: Generally clear but could be clearer
-    4-5: Somewhat unclear or confusing
-    1-3: Very unclear or poorly structured`,
-    criteriaMapping: {
-      "9-10": "Exceptionally clear and well-structured",
-      "7-8": "Clear with good organization",
-      "5-6": "Generally clear but could be clearer",
-      "1-4": "Unclear or poorly structured"
-    }
-  },
-  DEPTH: {
-    name: "Depth",
-    description: "Level of analysis, insight, and sophistication",
-    scale: 10,
-    weight: 0,
-    evaluationPrompt: `Rate the depth and analytical quality of this response (1-10):
-    - Does it provide meaningful insights or analysis?
-    - Is the level of detail appropriate for the question?
-    - Are underlying concepts or implications explored?
-    
-    10: Deep analysis with exceptional insights
-    8-9: Good depth with solid analysis
-    6-7: Moderate depth, some analysis
-    4-5: Surface-level treatment
-    1-3: Very shallow or superficial`,
-    criteriaMapping: {
-      "9-10": "Deep analysis with exceptional insights",
-      "7-8": "Good depth with solid analysis", 
-      "5-6": "Moderate depth, some analysis",
-      "1-4": "Shallow or superficial"
-    }
-  },
-  SAFETY: {
-    name: "Safety",
-    description: "Absence of harmful, biased, or inappropriate content",
-    scale: 10,
-    weight: 0,
-    evaluationPrompt: `Rate the safety and appropriateness of this response (1-10):
-    - Is content free from harmful or dangerous advice?
-    - Are there any ethical concerns or biases?
-    - Is the tone appropriate and respectful?
-    
-    10: Completely safe and appropriate
-    8-9: Safe with minor concerns
-    6-7: Generally safe but some issues
-    4-5: Some safety or ethical concerns
-    1-3: Significant safety risks or inappropriate`,
-    criteriaMapping: {
-      "9-10": "Completely safe and appropriate",
-      "7-8": "Safe with minor concerns",
-      "5-6": "Generally safe but some issues", 
-      "1-4": "Safety or ethical concerns present"
-    }
-  }
-};
+// Removed old multi-dimensional evaluation interfaces and constants
+// Now using optimized single-shot grading approach
 
 const QUESTION_TYPE_WEIGHTS = {
   FACTUAL: { 
@@ -554,11 +577,23 @@ const QUESTION_TYPE_WEIGHTS = {
   }
 };
 
-// Question Classification Function
-async function classifyQuestion(query: string, systemContext?: string): Promise<{
-  type: 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL';
-  timing: number;
+// Single-Shot Grading Function (replaces classifyQuestion + evaluateMultiDimensional)
+async function gradeResponseOneShot(query: string, response: string, systemContext?: string): Promise<{
+  questionType: 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL';
+  dimensionScores: Array<{
+    dimension: string;
+    score: number;
+    reasoning: string;
+    confidence: number;
+  }>;
+  weightedComposite: number;
+  confidence: number;
+  variance: number;
+  threshold: number;
+  passed: boolean;
   cost: number;
+  timing: number;
+  cost_breakdown: Record<string, unknown>;
 }> {
   const startTime = Date.now()
   const anthropicApiKey = process.env.ANTHROPIC_KEY
@@ -570,37 +605,42 @@ async function classifyQuestion(query: string, systemContext?: string): Promise<
     ? `\nSystem Context: "${systemContext}"\n` 
     : ''
 
-  const classificationPrompt = `Classify this question into ONE of these categories:
+  const prompt = `Return JSON only. Classify the question type and score the response across all dimensions.
 
-FACTUAL: Basic facts, definitions, math, simple "what is" questions
-- Examples: "What is the capital of France?", "What is 2+2?", "When was WWII?"
-- Key: Direct factual answers
+{
+  "type": "FACTUAL | ANALYTICAL | CREATIVE | TECHNICAL | ETHICAL",
+  "scores": {
+    "accuracy": 1-10,
+    "completeness": 1-10,
+    "clarity": 1-10,
+    "depth": 1-10,
+    "safety": 1-10
+  },
+  "reasoning": {
+    "accuracy": "<brief explanation>",
+    "completeness": "<brief explanation>",
+    "clarity": "<brief explanation>",
+    "depth": "<brief explanation>",
+    "safety": "<brief explanation>"
+  },
+  "confidence": 0.0-1.0,
+  "overall_reason": "<40 words on key flaws or strengths>"
+}
 
-ANALYTICAL: Business analysis, strategy, economic evaluation, complex reasoning
-- Examples: "Analyze market trends", "Develop a strategy", "Compare business models", "Evaluate ROI"
-- Key: Requires analytical thinking, data interpretation, strategic reasoning
-- Note: Business strategies are ANALYTICAL, not creative
+Question Types:
+- FACTUAL: Basic facts, definitions, math, simple "what is" questions
+- ANALYTICAL: Business analysis, strategy, economic evaluation, complex reasoning  
+- CREATIVE: Original content creation, artistic expression, storytelling
+- TECHNICAL: Specific technical knowledge, procedures, code, domain expertise
+- ETHICAL: Questions involving moral judgments, values, sensitive topics
 
-CREATIVE: Original content creation, artistic expression, storytelling
-- Examples: "Write a poem", "Create a fictional story", "Design an advertisement slogan"
-- Key: Requires imagination and artistic expression, not business analysis
+Question: """${query}"""${systemContextSection}
+Response to Evaluate: """${response}"""
 
-TECHNICAL: Specific technical knowledge, procedures, code, or domain expertise
-- Examples: "How to configure X?", "Debug this code", "Medical diagnosis", "Engineering calculations"
-- Key: Requires specialized technical knowledge
-
-ETHICAL: Questions involving moral judgments, values, or sensitive topics
-- Examples: "Is X right or wrong?", "Should we do Y?", "Political opinions"
-- Key: Involves moral or ethical considerations
-
-Question: "${query}"${systemContextSection}
-
-Important: Business strategies, market analysis, and data-driven decision making are ANALYTICAL, not CREATIVE.
-
-Respond with ONLY the category name: FACTUAL, ANALYTICAL, CREATIVE, TECHNICAL, or ETHICAL`
+Focus on accuracy for factual questions, depth for analytical ones, creativity for creative tasks, precision for technical queries, and safety for ethical questions.`
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const apiResponse = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -609,201 +649,145 @@ Respond with ONLY the category name: FACTUAL, ANALYTICAL, CREATIVE, TECHNICAL, o
       },
       body: JSON.stringify({
         model: 'claude-3-haiku-20240307',
-        max_tokens: 20,
+        max_tokens: 400,
         messages: [
-          { role: 'user', content: classificationPrompt }
+          { role: 'user', content: prompt }
         ]
       })
     })
 
     const timing = Date.now() - startTime
     
-    if (!response.ok) {
-      console.error('Anthropic API error:', response.status, response.statusText)
-      return { type: 'ANALYTICAL', timing, cost: 0 } // Default fallback
+    if (!apiResponse.ok) {
+      console.error('Anthropic API error:', apiResponse.status, apiResponse.statusText)
+      throw new Error('Grading API call failed')
     }
 
-    const data = await response.json()
-    const classification = data.content?.[0]?.text?.trim()?.toUpperCase()
+    const data = await apiResponse.json()
+    const jsonText = data.content?.[0]?.text?.trim()
     
+    if (!jsonText) {
+      throw new Error('No response content received')
+    }
+
+    // Parse the JSON response
+    let parsedData
+    try {
+      parsedData = JSON.parse(jsonText)
+    } catch (parseError) {
+      console.error('Failed to parse grading JSON:', jsonText)
+      throw new Error('Invalid JSON response from grader')
+    }
+
     // Calculate cost (Claude Haiku pricing: $0.25/1M input, $1.25/1M output)
     const inputTokens = data.usage?.input_tokens || 0
     const outputTokens = data.usage?.output_tokens || 0
     const cost = (inputTokens * 0.25 / 1000000) + (outputTokens * 1.25 / 1000000)
+
+    // Validate and extract data
+    const questionType = parsedData.type?.toUpperCase()
+    if (!['FACTUAL', 'ANALYTICAL', 'CREATIVE', 'TECHNICAL', 'ETHICAL'].includes(questionType)) {
+      throw new Error(`Invalid question type: ${questionType}`)
+    }
+
+    // Get weights for this question type
+    const weights = QUESTION_TYPE_WEIGHTS[questionType as keyof typeof QUESTION_TYPE_WEIGHTS]
     
-    if (['FACTUAL', 'ANALYTICAL', 'CREATIVE', 'TECHNICAL', 'ETHICAL'].includes(classification)) {
-      return { 
-        type: classification as 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL',
-        timing,
-        cost
+    // Build dimension scores array
+    const dimensionScores = [
+      {
+        dimension: 'accuracy',
+        score: parsedData.scores?.accuracy || 5,
+        reasoning: parsedData.reasoning?.accuracy || 'No reasoning provided',
+        confidence: parsedData.confidence || 0.8
+      },
+      {
+        dimension: 'completeness',
+        score: parsedData.scores?.completeness || 5,
+        reasoning: parsedData.reasoning?.completeness || 'No reasoning provided',
+        confidence: parsedData.confidence || 0.8
+      },
+      {
+        dimension: 'clarity',
+        score: parsedData.scores?.clarity || 5,
+        reasoning: parsedData.reasoning?.clarity || 'No reasoning provided',
+        confidence: parsedData.confidence || 0.8
+      },
+      {
+        dimension: 'depth',
+        score: parsedData.scores?.depth || 5,
+        reasoning: parsedData.reasoning?.depth || 'No reasoning provided',
+        confidence: parsedData.confidence || 0.8
+      },
+      {
+        dimension: 'safety',
+        score: parsedData.scores?.safety || 5,
+        reasoning: parsedData.reasoning?.safety || 'No reasoning provided',
+        confidence: parsedData.confidence || 0.8
+      }
+    ]
+
+    // Calculate weighted composite score
+    const weightedComposite = 
+      weights.accuracy * dimensionScores[0].score +
+      weights.completeness * dimensionScores[1].score +
+      weights.clarity * dimensionScores[2].score +
+      weights.depth * dimensionScores[3].score +
+      weights.safety * dimensionScores[4].score
+
+    // Calculate variance
+    const avgScore = dimensionScores.reduce((sum, d) => sum + d.score, 0) / dimensionScores.length
+    const variance = dimensionScores.reduce((sum, d) => sum + Math.pow(d.score - avgScore, 2), 0) / dimensionScores.length
+
+    const threshold = weights.threshold
+    const passed = weightedComposite >= threshold
+
+    return {
+      questionType: questionType as 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL',
+      dimensionScores,
+      weightedComposite: Math.round(weightedComposite * 10) / 10,
+      confidence: parsedData.confidence || 0.8,
+      variance: Math.round(variance * 10) / 10,
+      threshold,
+      passed,
+      cost,
+      timing,
+      cost_breakdown: {
+        'ONE_SHOT_GRADING': {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cost: cost
+        }
       }
     }
-    
-    return { type: 'ANALYTICAL', timing, cost } // Default fallback
   } catch (error) {
-    console.error('Question classification error:', error)
+    console.error('One-shot grading error:', sanitizeErrorMessage(error))
     const timing = Date.now() - startTime
-    return { type: 'ANALYTICAL', timing, cost: 0 } // Default fallback
-  }
-}
-
-// Multi-Dimensional Evaluation Function
-async function evaluateMultiDimensional(query: string, response: string, questionType: string, systemContext?: string): Promise<MultiDimensionalResult> {
-  const startTime = Date.now()
-  const anthropicApiKey = process.env.ANTHROPIC_KEY
-  if (!anthropicApiKey) {
-    throw new Error('ANTHROPIC_KEY environment variable not set')
-  }
-
-  const weights = QUESTION_TYPE_WEIGHTS[questionType as keyof typeof QUESTION_TYPE_WEIGHTS]
-  const dimensionScores: DimensionScore[] = []
-  let totalCost = 0
-  const costBreakdown: Record<string, unknown> = {}
-
-  // Evaluate each dimension in parallel for efficiency
-  const dimensionPromises = Object.entries(DIMENSIONS).map(async ([dimName, dimension]) => {
-    const systemContextSection = systemContext 
-      ? `\nOriginal System Context: "${systemContext}"\n` 
-      : ''
-
-    const evaluationPrompt = `${dimension.evaluationPrompt}
-
-Question Type: ${questionType}
-Original Question: "${query}"${systemContextSection}
-Response to Evaluate: "${response}"
-
-Provide your evaluation as JSON:
-{
-  "score": <number 1-10>,
-  "reasoning": "<brief explanation of score>",
-  "confidence": <number 0.0-1.0>
-}`
-
-    try {
-      const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': anthropicApiKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 200,
-          messages: [
-            { role: 'user', content: evaluationPrompt }
-          ]
-        })
-      })
-
-      if (!apiResponse.ok) {
-        console.error(`Dimension ${dimName} evaluation failed:`, apiResponse.status)
-        return {
-          dimension: dimName.toLowerCase(),
-          score: 5, // Neutral fallback
-          reasoning: "Evaluation failed - API error",
-          confidence: 0.0
-        }
-      }
-
-      const data = await apiResponse.json()
-      const content = data.content?.[0]?.text?.trim()
-      
-      // Calculate cost for this dimension
-      const inputTokens = data.usage?.input_tokens || 0
-      const outputTokens = data.usage?.output_tokens || 0
-      // Get grader pricing from database (Claude Haiku or alternatives)
-      const graderPricing = await getGraderModelPricing('claude-3-haiku-20240307')
-      const dimCost = calculateCost(graderPricing, inputTokens, outputTokens)
-      totalCost += dimCost
-      costBreakdown[dimName] = {
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        input_cost_per_1m: graderPricing.inputCostPerMillionTokens,
-        output_cost_per_1m: graderPricing.outputCostPerMillionTokens,
-        input_cost: (inputTokens / 1_000_000) * graderPricing.inputCostPerMillionTokens,
-        output_cost: (outputTokens / 1_000_000) * graderPricing.outputCostPerMillionTokens,
-        cost: dimCost,
-        grader_model: `${graderPricing.provider}/${graderPricing.modelName}${graderPricing.modelVariant ? `-${graderPricing.modelVariant}` : ''}`
-      }
-
-      try {
-        const jsonMatch = content.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0])
-          return {
-            dimension: dimName.toLowerCase(),
-            score: Math.max(1, Math.min(10, parsed.score || 5)),
-            reasoning: parsed.reasoning || "No reasoning provided",
-            confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5))
-          }
-        }
-      } catch (parseError) {
-        console.error(`Failed to parse dimension ${dimName} response:`, parseError)
-      }
-
-      // Fallback parsing
-      const scoreMatch = content.match(/score["\s]*:[\s]*(\d+)/i)
-      const score = scoreMatch ? parseInt(scoreMatch[1]) : 5
-      
-      return {
-        dimension: dimName.toLowerCase(),
-        score: Math.max(1, Math.min(10, score)),
-        reasoning: "Parsed from partial response",
-        confidence: 0.5
-      }
-
-    } catch (error) {
-      console.error(`Dimension ${dimName} evaluation error:`, error)
-      return {
-        dimension: dimName.toLowerCase(),
-        score: 5,
-        reasoning: "Evaluation failed - network error",
-        confidence: 0.0
-      }
+    
+    // Fallback response
+    return {
+      questionType: 'ANALYTICAL',
+      dimensionScores: [
+        { dimension: 'accuracy', score: 5, reasoning: 'Grading failed', confidence: 0 },
+        { dimension: 'completeness', score: 5, reasoning: 'Grading failed', confidence: 0 },
+        { dimension: 'clarity', score: 5, reasoning: 'Grading failed', confidence: 0 },
+        { dimension: 'depth', score: 5, reasoning: 'Grading failed', confidence: 0 },
+        { dimension: 'safety', score: 5, reasoning: 'Grading failed', confidence: 0 }
+      ],
+      weightedComposite: 50,
+      confidence: 0,
+      variance: 0,
+      threshold: 75,
+      passed: false,
+      cost: 0,
+      timing,
+      cost_breakdown: {}
     }
-  })
-
-  // Wait for all dimension evaluations to complete
-  const results = await Promise.all(dimensionPromises)
-  dimensionScores.push(...results)
-
-  // Calculate weighted composite score
-  let weightedSum = 0
-  let totalWeight = 0
-  let confidenceSum = 0
-  let variance = 0
-
-  dimensionScores.forEach(dimScore => {
-    const weight = weights[dimScore.dimension as keyof typeof weights] || 0
-    weightedSum += dimScore.score * weight
-    totalWeight += weight
-    confidenceSum += dimScore.confidence
-  })
-
-  const weightedComposite = totalWeight > 0 ? (weightedSum / totalWeight) * 10 : 50 // Scale to 100
-  const avgConfidence = dimensionScores.length > 0 ? confidenceSum / dimensionScores.length : 0.5
-
-  // Calculate variance to measure consistency
-  const avgScore = dimensionScores.reduce((sum, d) => sum + d.score, 0) / dimensionScores.length
-  variance = dimensionScores.reduce((sum, d) => sum + Math.pow(d.score - avgScore, 2), 0) / dimensionScores.length
-
-  const threshold = weights.threshold
-  const passed = weightedComposite >= threshold
-
-  return {
-    questionType: questionType as 'FACTUAL' | 'ANALYTICAL' | 'CREATIVE' | 'TECHNICAL' | 'ETHICAL',
-    dimensionScores,
-    weightedComposite: Math.round(weightedComposite * 10) / 10, // Round to 1 decimal
-    confidence: Math.round(avgConfidence * 100) / 100, // Round to 2 decimals
-    variance: Math.round(variance * 10) / 10, // Round to 1 decimal
-    threshold,
-    passed,
-    cost: totalCost,
-    timing: Date.now() - startTime,
-    cost_breakdown: costBreakdown
   }
 }
+
+// Removed old evaluateMultiDimensional function
+// Now using optimized gradeResponseOneShot approach
 
 // Step 4: Tier-1 Model (GPT-4) - now takes compressed messages and optional OpenAI key
 async function callTier1(messages: Message[], requestedModel: string, compressionData?: CompressionResult, openaiKey?: string) {
@@ -826,7 +810,7 @@ async function callTier1(messages: Message[], requestedModel: string, compressio
     const openaiModel = mapToOpenAIModel(requestedModel)
 
     const apiCallStart = Date.now()
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -897,7 +881,7 @@ async function callTier1(messages: Message[], requestedModel: string, compressio
       key_source: openaiKey ? 'user_provided' : 'system_fallback'
     }
   } catch (error) {
-    console.error('OpenAI API call failed:', error)
+    console.error('OpenAI API call failed:', sanitizeErrorMessage(error))
     if (error instanceof Error) {
       throw error
     }
@@ -1244,8 +1228,9 @@ export async function POST(request: NextRequest) {
     // Run Sleipner's cascade flow
     const cascadeResult = await runCascadeFlow(messages as Message[], model, forceEscalate, openaiKeyHeader || undefined)
     
-    const promptTokens = (messages as Message[]).reduce((acc, msg) => acc + Math.ceil(msg.content.length / 4), 0)
-    const completionTokens = Math.ceil((cascadeResult.response || '').length / 4)
+    const tokenCounts = countTokensWithOverhead(messages as Message[], cascadeResult.response || '')
+    const promptTokens = tokenCounts.inputTokens
+    const completionTokens = tokenCounts.outputTokens
     
     // Calculate baseline savings (what they would have paid for direct premium model)
     // Calculate direct premium cost using database pricing  
@@ -1270,7 +1255,7 @@ export async function POST(request: NextRequest) {
         cascadeResult.cost
       )
     } catch (error) {
-      console.error('Error calculating cost comparison:', error)
+      console.error('Error calculating cost comparison:', sanitizeErrorMessage(error))
       // Continue without cost comparison if it fails
     }
     
@@ -1387,8 +1372,8 @@ export async function POST(request: NextRequest) {
       apiKeyId: apiKeyId || undefined,
       endpoint: '/api/v1/chat/completions',
       httpMethod: 'POST',
-      requestData: requestBody,
-      responseData: debugMode ? response : { 
+      requestData: sanitizeForLogging(requestBody),
+      responseData: debugMode ? sanitizeForLogging(response) : { 
         // Store minimal response data for non-debug requests
         choices_count: response.choices.length,
         completion_length: response.choices[0]?.message?.content?.length || 0,
@@ -1411,7 +1396,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response, { headers })
   } catch (error) {
-    console.error('Error in chat completions:', error)
+    console.error('Error in chat completions:', sanitizeErrorMessage(error))
     
     // Log the failed API request asynchronously (non-blocking)
     const responseTimeMs = Date.now() - requestStartTime
@@ -1421,9 +1406,9 @@ export async function POST(request: NextRequest) {
       apiKeyId: apiKeyId || undefined,
       endpoint: '/api/v1/chat/completions',
       httpMethod: 'POST',
-      requestData: requestBody || {},
+      requestData: sanitizeForLogging(requestBody || {}),
       responseStatus: 'error',
-      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      errorMessage: sanitizeErrorMessage(error),
       responseTimeMs
     })
     
