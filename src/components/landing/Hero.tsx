@@ -1,6 +1,4 @@
 'use client'
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 import { CTAButton } from '@/components/ui/cta-button'
 import { BetaAccessModal } from '@/components/BetaAccessModal'
 import { useState } from 'react'

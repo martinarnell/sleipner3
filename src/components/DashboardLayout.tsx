@@ -222,7 +222,6 @@ function ApiKeyManagement({ apiKeys: initialApiKeys }: { apiKeys: ApiKey[] }) {
 function GetStartedSection({ apiKeys }: { apiKeys: ApiKey[] }) {
   const [copiedExample, setCopiedExample] = useState<string | null>(null)
   const [selectedExample, setSelectedExample] = useState<'curl' | 'python' | 'javascript'>('curl')
-  const [showBYOK, setShowBYOK] = useState(false)
   
   const copyExample = (id: string, text: string) => {
     navigator.clipboard.writeText(text)
@@ -316,7 +315,7 @@ console.log(data);`
               <div>
                 <h4 className="font-semibold mb-2">Model Selection</h4>
                 <p className="text-sm text-muted-foreground">
-                  Your specified model (e.g., "gpt-4") acts as the <strong>maximum tier</strong>. 
+                  Your specified model (e.g., &quot;gpt-4&quot;) acts as the <strong>maximum tier</strong>. 
                   Sleipner tries free alternatives first, then escalates if needed.
                 </p>
               </div>
@@ -336,7 +335,7 @@ console.log(data);`
               <code>Authorization: Bearer YOUR_API_KEY</code> <span className="text-muted-foreground">(required)</span>
             </div>
             <div className="bg-muted p-2 rounded">
-              <code>"model": "gpt-4"</code> <span className="text-muted-foreground">(sets max tier)</span>
+              <code>&quot;model&quot;: &quot;gpt-4&quot;</code> <span className="text-muted-foreground">(sets max tier)</span>
             </div>
           </div>
         </div>
